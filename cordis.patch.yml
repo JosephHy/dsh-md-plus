@@ -1,0 +1,6 @@
+# dsh-md-plus 的补丁层：把自己作为一个 bundle 行插进 profile。
+# 加载器 import 到宿主半 lib/index.js，再按 package.json 的 dsh.client 声明
+# 把 lib/client.js 作为浏览器半下发给页面。
+- insert:
+    - id: dsh-md-plus
+      name: dsh-md-plus

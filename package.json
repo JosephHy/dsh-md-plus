@@ -1,0 +1,66 @@
+{
+  "name": "dsh-md-plus",
+  "version": "0.1.0",
+  "description": "Markdown display enhancements for DeepSeek Harness Web: code block restyle, syntax highlighting for languages DSH does not ship, and built-in mermaid diagrams.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepare": "node scripts/build.mjs",
+    "preview": "node scripts/build.mjs && node scripts/preview.mjs && node scripts/shot.mjs",
+    "shot": "node scripts/shot.mjs",
+    "test": "node --test test/host.test.mjs test/client.test.mjs",
+    "check": "node --check src/index.js && node --check src/client.js && node --check src/highlight-runtime.js && node --check src/mermaid-runtime.js && node --check src/mermaid-theme.js && node --check scripts/build.mjs && npm test"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "happy-dom": "^20.14.5",
+    "mermaid": "^11.17.0",
+    "shiki": "4.4.3"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "markdown",
+    "code-block",
+    "syntax-highlighting",
+    "shiki",
+    "mermaid"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JosephHy/dsh-md-plus.git"
+  },
+  "homepage": "https://github.com/JosephHy/dsh-md-plus#readme",
+  "bugs": {
+    "url": "https://github.com/JosephHy/dsh-md-plus/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

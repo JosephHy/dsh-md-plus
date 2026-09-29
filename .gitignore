@@ -1,0 +1,9 @@
+node_modules/
+
+# lib/ 是构建产物，但 DSH 的商店与安装按固定 commit 走，所以产物必须随仓库提交：
+# 用 `git add -f lib/` 显式加进来，规则留着是为了让本地重建的产物不刷 git status。
+lib/
+
+# 本地预览产物；docs/preview.png 是 README 首屏用的，那个不忽略
+preview.html
+_mmd-work.html
