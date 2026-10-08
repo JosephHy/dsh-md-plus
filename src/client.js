@@ -198,6 +198,18 @@ window.__ModuleLoader__.load({
       TABLE + " > table tr:last-child td{border-bottom:0}",
       // 宽表横向扫读时给个落点
       TABLE + " > table tbody tr:hover td{background:var(--md-plus-tbl-hover)}",
+
+      // 宽表（≥4 列）不收着不行。宿主给这类表加了 .md-table-wide，并让它「出血」：
+      // 包裹层撑到面板宽，再用 padding-left 把表推到正文栏左侧。那个 padding 会吃掉
+      // 可用宽度，结果是表格比正文宽出一截、右边还被裁掉，而滚动条只在鼠标悬停时
+      // 才出现——文字表落进这个区间就很难读。这里按回正文栏宽，超出改为表内横滚。
+      // 特异性 (0,2,2)，压得住宿主的 .Pg4CGa_body .md-table-wide (0,2,0)。
+      TABLE + ".md-table-wide{width:100%;max-width:100%;margin-inline:0;padding-inline:0;overflow-x:auto}",
+      // 塞得下就撑满正文栏，塞不下保持自然宽度让外面滚，不把列挤成一列一个字
+      TABLE + ".md-table-wide > table{width:100%;max-width:none;min-width:max-content}",
+      // 宿主原本是「悬停才出滚动条」，所以悬停时会把预留的滚动条高度收掉；
+      // 现在滚动条常驻，再收掉就会跳 5px，固定住。
+      TABLE + ".md-table-wide:hover{padding-bottom:var(--dsh-scrollbar-width,5px)}",
     ].join("\n");
 
     var scripts = new Map();
