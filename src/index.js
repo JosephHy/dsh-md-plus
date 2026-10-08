@@ -1,6 +1,6 @@
 // dsh-md-plus 宿主半：只做一件事——把两个浏览器端运行时经同源路由发出去。
 // 皮肤与行为全在浏览器半（lib/client.js），这里不做别的。
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 
 export const name = "dsh-md-plus";
 export const inject = ["webServer"];
@@ -26,10 +26,20 @@ export function apply(ctx) {
               return;
             }
             try {
+              // 文件名不带内容指纹，原来的一年 immutable 会让升级后的运行时发不出去：
+              // 改成每次回源校验，没变就 304。
+              const info = await stat(source);
+              const etag = `W/"${info.size.toString(16)}-${Math.floor(info.mtimeMs).toString(16)}"`;
+              if (req.headers?.["if-none-match"] === etag) {
+                res.writeHead(304, { etag, "cache-control": "no-cache" });
+                res.end();
+                return;
+              }
               const body = await readFile(source);
               res.writeHead(200, {
                 "content-type": "text/javascript; charset=utf-8",
-                "cache-control": "public, max-age=31536000, immutable",
+                "cache-control": "no-cache",
+                etag,
               });
               res.end(req.method === "HEAD" ? undefined : body);
             } catch {

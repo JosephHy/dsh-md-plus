@@ -84,8 +84,10 @@ const shellCssRaw = readFileSync(shellCssFile(), "utf8");
 const shellCss = markdownRules(shellCssRaw).join("\n");
 const MODULES = classModules(shellCssRaw);
 
-// 代码块模块认 infostring / copyButton，markdown 正文模块认 tableScroll
+// 代码块模块认 infostring（旧头部）/ language + actions + copyButton（CodeToolbar 头部），
+// markdown 正文模块认 tableScroll
 const CB = classModule(["block", "bannerWrap", "infostring", "copyButton", "content", "plain"]);
+const TB = classModule(["card", "header", "heading", "language", "actions"]);
 const MD = classModule(["markdown", "tableScroll"]);
 
 /** 预览页里的小标题。 */
@@ -108,14 +110,20 @@ const plugin = registered.factory(() => {
   throw new Error("client bundle 不该 require 任何模块");
 });
 
-/** DSH CodeBlock 的 DOM 形状。 */
-function block(lang, code, bodyHtml) {
+/**
+ * DSH CodeBlock 在聊天区的真实形状：头部是 CodeToolbar（`toolbarLabels` 那支）。
+ * 语言标签走 `supportsHighlighting(lang) ? lang : labels.codeLabel`，
+ * 所以 DSH 不认识的语言（mermaid / dart）标签是占位文案「代码块」。
+ */
+function block(label, code, bodyHtml) {
   return (
     `<div class="${CB.get("block")} md-code-block">` +
-    `<div class="${CB.get("bannerWrap")}"><div class="${CB.get("banner")}" data-code-block-banner>` +
-    `<div class="${CB.get("infostring")}">${lang}</div>` +
-    `<div class="${CB.get("action")}"><button type="button" class="${CB.get("copyButton")}">复制</button></div>` +
-    "</div></div>" +
+    `<div class="${CB.get("bannerWrap")}"><div class="${TB.get("header")}" data-code-block-banner>` +
+    `<div class="${TB.get("heading")}"><span class="${TB.get("language")}">${label}</span></div>` +
+    `<div class="${TB.get("actions")}">` +
+    `<button type="button">换行</button>` +
+    `<button type="button" class="${CB.get("copyButton")}">复制</button>` +
+    "</div></div></div>" +
     `<div class="${CB.get("content")}" data-code-block-content>` +
     (bodyHtml ?? `<pre class="${CB.get("plain")}"><code>${code}</code></pre>`) +
     "</div></div>"
@@ -160,10 +168,10 @@ const jsonHtml = highlighter.codeToHtml(JSON_CODE, { lang: "json", theme });
 document.body.innerHTML =
   caption("JSON：DSH 自己高亮的语言，照样吃同一套卡片外观") +
   block("JSON", "", `<div>${jsonHtml}</div>`) +
-  caption("dart：DSH 内置的 26 种语言之外，由插件用 Shiki 补上颜色") +
-  block("dart", DART_CODE) +
-  caption("没有写语言：头部照样有图标和 Plain text，不再是一整片空白") +
-  block("", TREE_CODE);
+  caption("dart：DSH 不认的语言。本页的颜色是插件用 Shiki 直接上色的样子；0.2.0-rc.2 上头部语言名被占位「代码块」顶掉，这条补高亮暂时失效（见 README 已知边界）") +
+  block("代码块", DART_CODE) +
+  caption("没有写语言：头部照样有图标和文字，不再是一整片空白") +
+  block("代码块", TREE_CODE);
 
 plugin.apply({ effect: (fn) => fn() });
 await new Promise((resolve) => setTimeout(resolve, DEBOUNCE_MS + 400));
@@ -255,9 +263,9 @@ const svgs = renderViaChrome(MMD_CARDS);
 function mermaidCard({ id }, svg) {
   return (
     `<div class="${CB.get("block")} md-code-block" data-md-plus-mmd="diagram" data-md-plus-zoom="min">` +
-    `<div class="${CB.get("bannerWrap")}"><div class="${CB.get("banner")}" data-code-block-banner>` +
-    `<div class="${CB.get("infostring")}">mermaid</div>` +
-    `<div class="${CB.get("action")}">` +
+    `<div class="${TB.get("bannerWrap")}"><div class="${TB.get("header")}" data-code-block-banner>` +
+    `<div class="${TB.get("heading")}"><span class="${TB.get("language")}">代码块</span></div>` +
+    `<div class="${TB.get("actions")}">` +
     '<button type="button" class="md-plus-btn md-plus-zoom-out" title="缩小"></button>' +
     '<button type="button" class="md-plus-btn md-plus-zoom-in" title="放大"></button>' +
     '<button type="button" class="md-plus-btn md-plus-toggle" title="切换图形 / 代码"></button>' +
@@ -321,7 +329,7 @@ ${pluginCss}
 ${codeBlocksHtml}
 ${caption("表格：灰底表头、只有横线、外框收圆角，首末列各留 16px 内边距")}
 ${tableHtml}
-${caption("mermaid：插件自己渲染的图形。上面这张横排长链在 100% 下只有几十像素高（所以才有最低高度和滚轮缩放），下面这张是分叉图")}
+${caption("mermaid：插件自己渲染的图形。头部语言名同样是占位「代码块」，所以图是靠正文里的类型声明认出来的（flowchart / graph 都行）；上面这张横排长链在 100% 下只有几十像素高（所以才有最低高度和滚轮缩放），下面这张是分叉图")}
 </div>
 ${MMD_CARDS.map((card, index) => mermaidCard(card, svgs[index])).join("\n")}
 </div>

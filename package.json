@@ -1,6 +1,6 @@
 {
   "name": "dsh-md-plus",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Markdown display enhancements for DeepSeek Harness Web: code block restyle, syntax highlighting for languages DSH does not ship, and built-in mermaid diagrams.",
   "type": "module",
   "main": "lib/index.js",
@@ -13,6 +13,7 @@
     "lib",
     "cordis.patch.yml",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
@@ -35,7 +36,7 @@
   "devDependencies": {
     "esbuild": "0.28.2",
     "happy-dom": "^20.14.5",
-    "mermaid": "^11.17.0",
+    "mermaid": "^12.1.0",
     "shiki": "4.4.3"
   },
   "engines": {

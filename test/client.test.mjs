@@ -7,6 +7,14 @@ import { Window } from "happy-dom";
 const DEBOUNCE_MS = 160;
 const RUNTIME_URL = "/dsh-md-plus/highlight-runtime.js";
 
+/**
+ * 元素不能直接交给 assert。断言失败时 Node 会为了打印差异遍历整棵 DOM，
+ * 实测一瞬间提交几十 GB（报 Array buffer allocation failed，但内存已提交）——
+ * 而且它是堆外分配，--max-old-space-size 拦不住。
+ * 这里把元素化成只含标签名的短字符串，断言该过还过、该挂还挂。
+ */
+const tagOf = (node) => (node === null || node === undefined ? "null" : `<${node.tagName.toLowerCase()}>`);
+
 /** DSH CodeBlock 的 DOM 形状（见 dsh-client-ui-primitives 的 CodeBlock.js）。 */
 function codeBlockHtml(lang, code) {
   return (
@@ -21,9 +29,43 @@ function codeBlockHtml(lang, code) {
   );
 }
 
+/**
+ * DSH CodeBlock 在聊天区的真实形状：头部是 CodeToolbar（`toolbarLabels` 那支），
+ * 语言标签走 `supportsHighlighting(lang) ? lang : labels.codeLabel`。
+ * 所以 DSH 不认识的语言（mermaid 等）标签是占位文案，读不到围栏语言。
+ */
+function toolbarBlockHtml(label, code) {
+  return (
+    '<div class="_block_x md-code-block _card_x">' +
+    '<div class="_bannerWrap_x"><div class="_banner_x" data-code-block-banner>' +
+    `<div class="_heading_x"><span class="_language_x">${label}</span></div>` +
+    '<div class="_actions_x">' +
+    '<button type="button" aria-label="自动换行">换行</button>' +
+    '<button type="button">复制</button>' +
+    "</div></div></div>" +
+    '<div class="_content_x" data-code-block-content>' +
+    `<pre class="_plain_x"><code>${code}</code></pre>` +
+    "</div></div>"
+  );
+}
+
 let window;
 let document;
 let api;
+
+
+/** 假的 mermaid 运行时：只替换渲染器这一个边界，客户端半的逻辑仍然全走真的。 */
+const mermaidStub = {
+  calls: [],
+  async render(id, code, dark) {
+    this.calls.push({ id, code, dark });
+    if (code.includes("BOOM")) throw new Error("Parse error on line 2");
+    return `<svg data-stub="1" data-id="${id}"></svg>`;
+  },
+};
+
+/** 真实的补高亮运行时对象；卸载回调会清掉这个全局，重装时要能放回去。 */
+let hlRuntime;
 
 before(async () => {
   window = new Window({ url: "http://127.0.0.1:43120/" });
@@ -34,16 +76,10 @@ before(async () => {
 
   // 真实的构建产物：装上去就等于页面已经加载过运行时
   await import("../lib/highlight-runtime.js");
+  hlRuntime = window.__DSH_MD_PLUS_HL__;
   // mermaid 渲染真的跑起来要浏览器排版能力（getBBox 等），happy-dom 撑不住。
   // 这里只替换「渲染器」这一个边界，客户端半的识别/插入/切换/回退逻辑仍然全走真的。
-  window.__DSH_MD_PLUS_MMD__ = {
-    calls: [],
-    async render(id, code, dark) {
-      this.calls.push({ id, code, dark });
-      if (code.includes("BOOM")) throw new Error("Parse error on line 2");
-      return `<svg data-stub="1" data-id="${id}"></svg>`;
-    },
-  };
+  window.__DSH_MD_PLUS_MMD__ = mermaidStub;
 
   let registered = null;
   window.__ModuleLoader__ = {
@@ -63,6 +99,9 @@ function mount() {
   const effects = [];
   const ctx = { effect: (fn) => { effects.push(fn()); } };
   document.body.innerHTML = "";
+  // 卸载回调会清掉运行时全局；重装时把桩放回去（真机上这一步等于重新下载运行时）
+  window.__DSH_MD_PLUS_HL__ ??= hlRuntime;
+  window.__DSH_MD_PLUS_MMD__ ??= mermaidStub;
   api.apply(ctx);
   return ctx;
 }
@@ -103,7 +142,7 @@ test("DSH 自己高亮的语言不碰", async () => {
   mount();
   document.body.innerHTML = codeBlockHtml("python", "print(1)");
   await settle();
-  assert.equal(document.querySelector(".md-plus-hl"), null);
+  assert.equal(tagOf(document.querySelector(".md-plus-hl")), "null");
   assert.equal(document.querySelector(".md-code-block").getAttribute("data-md-plus"), null);
 });
 
@@ -113,14 +152,14 @@ test("已被 DSH 上色的块不重复处理", async () => {
     '<div class="md-code-block"><div data-code-block-banner><div>rust</div></div>' +
     '<div data-code-block-content><div><pre class="shiki css-variables"><code>fn main() {}</code></pre></div></div></div>';
   await settle();
-  assert.equal(document.querySelector(".md-plus-hl"), null);
+  assert.equal(tagOf(document.querySelector(".md-plus-hl")), "null");
 });
 
 test("mermaid 块画成图形，并且不重复上色", async () => {
   mount();
   document.body.innerHTML = codeBlockHtml("mermaid", "flowchart LR\n A --> B");
   await settle();
-  assert.equal(document.querySelector(".md-plus-hl"), null, "不该再当普通代码高亮");
+  assert.equal(tagOf(document.querySelector(".md-plus-hl")), "null", "不该再当普通代码高亮");
   assert.ok(document.querySelector(".md-plus-mmd svg[data-stub]"), "应该渲染出图形");
   assert.equal(document.querySelector(".md-code-block").getAttribute("data-md-plus-mmd"), "diagram");
 });
@@ -145,13 +184,125 @@ test("mmd / mermaidjs 别名同样处理", async () => {
   }
 });
 
+// ── 头部语言标签被宿主换成占位文案（CodeToolbar）时的识别回归 ──────────
+// 真机上 DSH 不认识的语言标签显示占位文案，读不到围栏语言；
+// 这两条就是拦住「mermaid 不渲染」和「普通代码被误判成图」的用例。
+
+test("占位文案下，mermaid 仍按正文认出来并出图", async () => {
+  mount();
+  window.__DSH_MD_PLUS_MMD__.calls.length = 0;
+  document.body.innerHTML = toolbarBlockHtml("代码块", "flowchart LR\n A --> B");
+  await settle();
+
+  const block = document.querySelector(".md-code-block");
+  assert.equal(window.__DSH_MD_PLUS_MMD__.calls.length, 1, "占位标签下也要送去渲染");
+  assert.ok(document.querySelector(".md-plus-mmd svg[data-stub]"), "应该渲染出图形");
+  assert.equal(block.getAttribute("data-md-plus-mmd"), "diagram");
+});
+
+test("正文嗅探会跳过 %% 指令行与 --- frontmatter 块", async () => {
+  mount();
+  window.__DSH_MD_PLUS_MMD__.calls.length = 0;
+  document.body.innerHTML = toolbarBlockHtml(
+    "代码块",
+    [
+      "%%{init: {theme: 'neutral'}}%%",
+      "---",
+      "config:",
+      "  layout: elk",
+      "---",
+      "erDiagram",
+      "  A ||--o{ B : has",
+    ].join("\n"),
+  );
+  await settle();
+
+  assert.equal(window.__DSH_MD_PLUS_MMD__.calls.length, 1, "剥掉指令与 frontmatter 后仍要认出 erDiagram");
+  assert.equal(document.querySelector(".md-code-block").getAttribute("data-md-plus-mmd"), "diagram");
+});
+
+test("占位文案不会被当成图：普通代码留在代码形态", async () => {
+  mount();
+  window.__DSH_MD_PLUS_MMD__.calls.length = 0;
+  document.body.innerHTML = toolbarBlockHtml("代码块", "void main() {}");
+  await settle();
+
+  const block = document.querySelector(".md-code-block");
+  assert.equal(window.__DSH_MD_PLUS_MMD__.calls.length, 0, "普通代码不该被送去画图");
+  assert.equal(block.hasAttribute("data-md-plus-mmd"), false, "不该标成图块");
+  assert.ok(block.querySelector(".md-plus-tool"), "头部仍是普通块的按钮组");
+  const src = block.querySelector("[data-code-block-content] pre");
+  assert.equal(src.textContent, "void main() {}", "源码原样留着，复制仍拿到原文");
+});
+
+test("标签本身是 mermaid 系时照旧按标签认（mmd / mermaidjs / menu 里的 mmd）", async () => {
+  for (const lang of ["mermaid", "mmd", "mermaidjs"]) {
+    mount();
+    window.__DSH_MD_PLUS_MMD__.calls.length = 0;
+    document.body.innerHTML = toolbarBlockHtml(lang, "graph LR\n  A[入口] --> B[出口]");
+    await settle();
+    assert.equal(
+      window.__DSH_MD_PLUS_MMD__.calls.length,
+      1,
+      `${lang} 标签下应该渲染`,
+    );
+  }
+});
+
+// ── mermaid 12.x 新增的两个图种：占位标签下也要能认出来 ────────────────
+
+test("12.x 新图种 usecase-beta / agentflow-beta 在占位标签下也认", async () => {
+  for (const [keyword, source] of [
+    [
+      "usecase-beta",
+      'usecase-beta\ndirection LR\nactor Customer("用户")\nCheckout("下单")\nCustomer --> Checkout',
+    ],
+    ["agentflow-beta", "agentflow-beta\n  A --> B"],
+  ]) {
+    mount();
+    window.__DSH_MD_PLUS_MMD__.calls.length = 0;
+    document.body.innerHTML = toolbarBlockHtml("代码块", source);
+    await settle();
+
+    assert.equal(window.__DSH_MD_PLUS_MMD__.calls.length, 1, `${keyword} 应该送去渲染`);
+    assert.equal(
+      document.querySelector(".md-code-block").getAttribute("data-md-plus-mmd"),
+      "diagram",
+      `${keyword} 要标成图块`,
+    );
+  }
+});
+
+test("渲染器吐出错误卡片时，回退源码 + 一行原因（不把卡片当图）", async () => {
+  mount();
+  // mermaid 画不出来时返回的就是这张卡片，客户端不能把它当图插进卡片里
+  const original = window.__DSH_MD_PLUS_MMD__.render;
+  window.__DSH_MD_PLUS_MMD__.render = async () =>
+    '<svg aria-roledescription="error"><text>Syntax error in text</text></svg>';
+  try {
+    document.body.innerHTML = codeBlockHtml("mermaid", "flowchart TD\n A -->");
+    await settle();
+
+    const block = document.querySelector(".md-code-block");
+    const note = document.querySelector(".md-plus-mmd-error");
+    assert.equal(tagOf(document.querySelector(".md-plus-mmd svg[aria-roledescription='error']")), "null",
+      "错误卡片不该被当成图",
+    );
+    assert.equal(block.getAttribute("data-md-plus-mmd"), "failed", "要标成失败态");
+    assert.ok(note, "要挂一行失败原因");
+    assert.match(note.textContent, /^mermaid 渲染失败：/);
+  } finally {
+    window.__DSH_MD_PLUS_MMD__.render = original;
+  }
+});
+
 test("mermaid 块的头部是图形/代码切换，不是不换行", async () => {
   mount();
   document.body.innerHTML = codeBlockHtml("mermaid", "flowchart LR\n A --> B");
   await settle();
   const block = document.querySelector(".md-code-block");
   assert.ok(block.querySelector(".md-plus-toggle"), "要有图形/代码切换按钮");
-  assert.equal(block.querySelector(".md-plus-tool"), null, "不该出现不换行按钮");
+  assert.equal(tagOf(block.querySelector(".md-plus-tool")), "null", "不该出现不换行按钮");
 });
 
 // ── 缩放 / 拖拽 ───────────────────────────────────────────────────────
@@ -261,8 +412,8 @@ test("普通代码块没有缩放按钮", async () => {
   mount();
   document.body.innerHTML = codeBlockHtml("dart", "int a = 1;");
   await settle();
-  assert.equal(document.querySelector(".md-plus-zoom-in"), null);
-  assert.equal(document.querySelector(".md-plus-zoom-out"), null);
+  assert.equal(tagOf(document.querySelector(".md-plus-zoom-in")), "null");
+  assert.equal(tagOf(document.querySelector(".md-plus-zoom-out")), "null");
 });
 
 test("图形有最低高度，长扁图放大后不是一条缝", async () => {
@@ -364,7 +515,7 @@ test("渲染失败退回源码并挂出原因", async () => {
   await settle();
   const block = document.querySelector(".md-code-block");
   assert.equal(block.getAttribute("data-md-plus-mmd"), "failed");
-  assert.equal(block.querySelector(".md-plus-mmd"), null, "失败的图不该留在页面上");
+  assert.equal(tagOf(block.querySelector(".md-plus-mmd")), "null", "失败的图不该留在页面上");
   const note = block.querySelector(".md-plus-mmd-error");
   assert.ok(note, "要挂一行失败原因");
   assert.match(note.textContent, /Parse error on line 2/);
@@ -404,7 +555,7 @@ test("流式输出期间不动手，定稿后补上", async () => {
   document.body.innerHTML =
     '<div data-streaming="true">' + codeBlockHtml("dart", "List<int> a = [") + "</div>";
   await settle();
-  assert.equal(document.querySelector(".md-plus-hl"), null, "流式中不该插入");
+  assert.equal(tagOf(document.querySelector(".md-plus-hl")), "null", "流式中不该插入");
 
   // 流式结束：DSH 会摘掉 data-streaming
   document.querySelector("[data-streaming]").removeAttribute("data-streaming");
@@ -423,7 +574,7 @@ test("源码变了会重新上色", async () => {
 
   const blocks = document.querySelectorAll(".md-plus-hl");
   assert.equal(blocks.length, 1, "旧宿主要被换掉而不是堆积");
-  assert.notEqual(blocks[0], before);
+  assert.ok(blocks[0] !== before, "旧宿主要被换掉而不是堆积");
   assert.match(blocks[0].textContent, /a = 2/);
 });
 
@@ -439,7 +590,7 @@ test("未知语言安静跳过", async () => {
   mount();
   document.body.innerHTML = codeBlockHtml("notalanguage", "???");
   await settle();
-  assert.equal(document.querySelector(".md-plus-hl"), null);
+  assert.equal(tagOf(document.querySelector(".md-plus-hl")), "null");
 });
 
 test("卸载后不留下样式与观察者", async () => {
@@ -450,7 +601,7 @@ test("卸载后不留下样式与观察者", async () => {
   assert.ok(document.querySelector("style[data-md-plus-style]"), "应注入样式");
 
   effects[0]();
-  assert.equal(document.querySelector("style[data-md-plus-style]"), null, "卸载要摘掉样式");
+  assert.equal(tagOf(document.querySelector("style[data-md-plus-style]")), "null", "卸载要摘掉样式");
 });
 
 // ── 样式层 ────────────────────────────────────────────────────────────
@@ -500,7 +651,7 @@ test("DSH 自己高亮的语言也有同样的头部样式", async () => {
   await settle();
 
   assert.ok(document.querySelector(".md-plus-tool"), "不补高亮也要装饰头部");
-  assert.equal(document.querySelector(".md-plus-hl"), null, "但不该重复上色");
+  assert.equal(tagOf(document.querySelector(".md-plus-hl")), "null", "但不该重复上色");
 });
 
 test("点「不换行」按钮能切换状态", async () => {

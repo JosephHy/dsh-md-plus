@@ -59,6 +59,15 @@ window.__ModuleLoader__.load({
     // mermaid 系围栏由本插件自己画。
     var MMD_LANGS = new Set(["mermaid", "mermaidjs", "mmd"]);
 
+    // DSH 0.2.0-rc.2 的代码块头部是 CodeToolbar，语言标签走
+    // `supportsHighlighting(lang) ? lang : labels.codeLabel`，mermaid 不在它的表里，
+    // 所以标签显示的是占位文案（中文「代码块」），readLang() 读不到围栏语言。
+    // 兜底：认不出标签时看正文——mermaid 的类型声明必须单独占一行。
+    // 这张表只给图表识别用，不能回流进 readLang()：后者是分流依据，
+    // 凭正文改判会让「不认的语言」再也不去补高亮。
+    // usecase-beta / agentflow-beta 是 mermaid 12.x 才有的图种，引擎不到 12 就画不出来。
+    var MMD_TYPE = /^\s*(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|quadrantChart|xychart-beta|sankey-beta|block-beta|packet-beta|architecture-beta|usecase-beta|agentflow-beta|C4Context|requirementDiagram|kanban|radar|treemap|venn|ishikawa|wardley|cynefin|treeView|zenuml)\b/im;
+
     /** 把 SVG 包成 CSS mask 能用的 data URI；形状走 alpha 通道，颜色交给 currentColor。 */
     function icon(paths) {
       var svg =
@@ -231,6 +240,32 @@ window.__ModuleLoader__.load({
       return (info?.textContent ?? "").trim().toLowerCase();
     }
 
+    /** 正文里的图类型；没有就是 null。先剥掉 %% 注释行与 --- frontmatter 块。 */
+    function sniffDiagramType(code) {
+      var text = code;
+      if (text.startsWith("---")) {
+        var blank = text.indexOf("\n");
+        var close = blank < 0 ? -1 : text.indexOf("\n---", blank);
+        text = close < 0 ? "" : text.slice(close + 4);
+      }
+      var body = text
+        .split("\n")
+        .filter((line) => !line.trimStart().startsWith("%%"))
+        .join("\n");
+      return MMD_TYPE.exec(body)?.[1] ?? null;
+    }
+
+    /**
+     * 这块是不是 mermaid 图形。围栏名认得最可靠；标签被宿主换成占位文案时，
+     * 退回正文嗅探（见 MMD_TYPE 那段注释）。
+     */
+    function diagramKind(block) {
+      if (MMD_LANGS.has(readLang(block))) return "diagram";
+      var pre = block.querySelector(CONTENT + " pre");
+      if (pre === null) return null;
+      return sniffDiagramType(pre.textContent ?? "") === null ? null : "diagram";
+    }
+
     /** 这块 DOM 是不是插件自己插的（用来忽略自己触发的变更）。 */
     function isOurs(node) {
       var element = node?.nodeType === 1 ? node : node?.parentElement;
@@ -323,7 +358,7 @@ window.__ModuleLoader__.load({
       var action = copy?.parentElement;
       if (action === null || action === undefined) return;
 
-      var specs = MMD_LANGS.has(readLang(block)) ? MMD_BUTTONS : PLAIN_BUTTONS;
+      var specs = readLang(block) !== "" && diagramKind(block) !== null ? MMD_BUTTONS : PLAIN_BUTTONS;
       for (const existing of action.querySelectorAll("." + BTN_CLASS)) {
         if (specs.some((spec) => existing.classList.contains(spec.cls))) continue;
         existing.remove();
@@ -355,7 +390,7 @@ window.__ModuleLoader__.load({
 
       var lang = readLang(block);
       if (lang === "") return;
-      if (MMD_LANGS.has(lang)) {
+      if (diagramKind(block) !== null) {
         await renderDiagram(block, content, pre);
         return;
       }
@@ -418,6 +453,11 @@ window.__ModuleLoader__.load({
         return;
       }
       if (typeof svg !== "string" || svg === "") return;
+      // 引擎陈旧时错误卡片会被当成渲染成功返回，别把它当图插进卡片
+      if (svg.includes('aria-roledescription="error"')) {
+        failDiagram(block, content, pre, key, new Error("mermaid 返回的是错误卡片"));
+        return;
+      }
       if (!pre.isConnected || (pre.textContent ?? "").trim() !== code) {
         schedule(block);
         return;
@@ -579,7 +619,9 @@ window.__ModuleLoader__.load({
       content.querySelector("." + MMD_CLASS)?.remove();
       var note = content.querySelector("." + MMD_CLASS + "-error") ?? document.createElement("p");
       note.className = MMD_CLASS + "-error";
-      note.textContent = "mermaid 渲染失败：" + (error?.message ?? String(error));
+      // 解析错误是多行报告，只留第一行，免得把卡片撑成一屏
+      var reason = (error?.message ?? String(error)).split("\n")[0] ?? "";
+      note.textContent = "mermaid 渲染失败：" + reason;
       content.appendChild(note);
       block.setAttribute(KEY_ATTR, key);
       block.setAttribute(MMD_ATTR, "failed");
@@ -614,6 +656,9 @@ window.__ModuleLoader__.load({
             script.remove();
           }
           scripts.clear();
+          // 不清运行时全局的话，插件重载后 loadScript() 会直接复用旧引擎
+          delete window[HL_GLOBAL];
+          delete window[MMD_GLOBAL];
         };
       }, "dsh-md-plus: code block styling, highlighting and diagrams");
     }

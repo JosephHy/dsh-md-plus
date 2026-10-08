@@ -7,3 +7,9 @@ lib/
 # 本地预览产物；docs/preview.png 是 README 首屏用的，那个不忽略
 preview.html
 _mmd-work.html
+
+# 本机发版手册：只留本地，不进仓库也不进 npm 包
+RELEASES.local.md
+
+# 切 profile 成本地目录装之前做的配置备份
+.local-backup/

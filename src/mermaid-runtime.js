@@ -35,6 +35,21 @@ function roundNodes(host) {
   }
 }
 
+/** mermaid 画不出来时返回的是这张「Syntax error in text」卡片，不是图。 */
+function isErrorSvg(svg) {
+  return svg.includes('aria-roledescription="error"') || svg.includes("Syntax error in text");
+}
+
+/**
+ * mermaid 失败时会把临时容器留在页面里：容器 id 是 `d<id>`，里面是那张错误卡片。
+ * 每次重渲染留一个，它们会在页面底部越堆越多——所以渲染完必须自己收干净。
+ */
+function cleanStrays(id) {
+  // id 是本插件自己拼的（dsh-md-plus-mmd-N），只有 CSS.escape 缺失的老环境才退回原样
+  const key = typeof CSS !== "undefined" && CSS.escape !== undefined ? CSS.escape(id) : id;
+  for (const node of document.querySelectorAll(`#d${key}, #d${key} svg`)) node.remove();
+}
+
 window.__DSH_MD_PLUS_MMD__ = {
   /**
    * 把一段 mermaid 源码渲染成 SVG。
@@ -46,12 +61,24 @@ window.__DSH_MD_PLUS_MMD__ = {
   render(id, code, dark) {
     return enqueue(async () => {
       ensureConfigured(dark === true);
-      const { svg } = await mermaid.render(id, code);
-      const host = document.createElement("div");
-      host.innerHTML = svg;
-      roundNodes(host);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      return host.innerHTML;
+      let failure = null;
+      // mermaid 的解析错误不一定抛出：配了 parseError 时它只回调，
+      // 然后照常把错误卡片序列化出来当作「渲染成功」。这里两条路都堵上。
+      mermaid.parseError = (error) => {
+        failure ??= error;
+      };
+      try {
+        const { svg } = await mermaid.render(id, code);
+        if (failure !== null) throw failure;
+        if (isErrorSvg(svg)) throw new Error("mermaid 返回的是错误卡片（语法无法解析）");
+        const host = document.createElement("div");
+        host.innerHTML = svg;
+        roundNodes(host);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        return host.innerHTML;
+      } finally {
+        cleanStrays(id);
+      }
     });
   },
 };

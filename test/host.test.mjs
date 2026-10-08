@@ -6,7 +6,7 @@ import { readFile } from "node:fs/promises";
 import { apply, name, inject, RUNTIMES } from "../lib/index.js";
 
 /** 收一次请求，返回 { status, headers, body }。 */
-function request(route, method = "GET") {
+function request(route, method = "GET", headers = {}) {
   return new Promise((resolve) => {
     const res = {
       status: 0,
@@ -19,7 +19,7 @@ function request(route, method = "GET") {
         resolve({ status: this.status, headers: this.headers, body });
       },
     };
-    void route.handler({ method }, res);
+    void route.handler({ method, headers }, res);
   });
 }
 
@@ -87,4 +87,21 @@ test("浏览器半里的 URL 与宿主半一致", async () => {
   for (const path of Object.keys(RUNTIMES)) {
     assert.ok(client.includes(`"${path}"`), `client.js 里没有出现 ${path}，两端会各说各话`);
   }
+});
+
+test("运行时响应不做长期强缓存，改用 ETag 回源校验", async () => {
+  const route = routeFor(registerRoutes(), Object.keys(RUNTIMES)[0]);
+
+  const first = await request(route);
+  assert.equal(first.status, 200);
+  assert.equal(
+    first.headers["cache-control"],
+    "no-cache",
+    "文件名不带内容指纹，一年 immutable 会让升级后的运行时发不出去",
+  );
+  assert.ok(first.headers.etag, "要带 ETag，没变时才能省掉重复下载");
+
+  const second = await request(route, "GET", { "if-none-match": first.headers.etag });
+  assert.equal(second.status, 304, "内容没变要回 304");
+  assert.equal(second.body, undefined, "304 不带响应体");
 });
