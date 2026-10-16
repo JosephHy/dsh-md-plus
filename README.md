@@ -19,21 +19,7 @@ DSH 原生的头部是「小灰字 + 文字复制按钮」，没写语言时左�
 
 样式是纯 CSS 打在 `.md-code-block` 上，所以所有语言（包括 DSH 自己高亮的 JSON/TS/Python）都吃同一套外观。想调间距，改 `src/client.js` 里 banner 的 `padding` 末位和 pre 的 `padding` 首位。
 
-### 语法高亮
 
-DSH 只认它语言表里的语言，其余走纯文本回退，没颜色。`dart` 就不在表里：
-
-```dart
-class CodeCard extends StatelessWidget {
-  const CodeCard({super.key, required this.language});
-
-  final String language;
-}
-```
-
-插件把这类块捡出来用自带的 Shiki 上色，DSH 认的语言一律不碰。
-
-⚠️ 在 DSH 0.2.0-rc.2 上这套暂时失效，原因见文末「已知边界」。
 
 ### mermaid 图形
 
@@ -67,7 +53,7 @@ dsh plugin --profile desktop remove dsh-md-plus
 ```powershell
 npm install       # 顺带跑 prepare → build
 npm run build     # 产出 lib/ 下四个文件
-npm run check     # 语法检查 + 52 条测试
+npm run check     # 语法检查 + 53 条测试
 npm run preview   # 生成 preview.html（含真渲出来的 mermaid 图）
 npm run shot      # 用 headless Chrome 把 preview.html 截成 docs/preview.png
 ```
@@ -78,8 +64,9 @@ npm run shot      # 用 headless Chrome 把 preview.html 截成 docs/preview.png
 
 ## 已知边界
 
-- 0.2.0-rc.2 起，头部那行语言名由宿主决定显示什么：认这门语言就显示语言名，不认就显示本地化占位文案（中文「代码块」）。头部永远只有「代码块」，插件读不到围栏语言，就无法正常转化，且还不报错。现在改看正文：跳过 `%%` 注释和开头的 `---` frontmatter，正文里有行以 mermaid 类型关键字开头就当图。这条只管认图，不参与补高亮的判断。
-- 同一个原因让补高亮在 0.2.0-rc.2 上失效：拿不到真语言名，就没法问 Shiki 该用哪套语法，`dart`、`vue` 这类块只能没颜色。。
+- 0.2.0-rc.2 起，头部那行语言名由宿主决定显示什么：认这门语言就显示语言名，不认就显示本地化占位文案（中文「代码块」）。认不出来就读不到围栏语言，插件无法转化，且还不报错。mermaid 这条改看正文：跳过 `%%` 注释和开头的 `---` frontmatter，正文里有行以 mermaid 类型关键字开头就当图。这条只管认图，不参与补高亮的判断。
+- 同一个原因让补高亮在 0.2.0-rc.2 上基本失效：`gdscript`、`nushell` 这类 DSH 不认的语言，头部是占位文案，插件问不到 Shiki 该用哪套语法，只能没颜色。反过来 DSH 认得的那 108 种（`dart`、`vue`、`scala` …）由 DSH 自己上色，插件不碰。
+- `DSH_LANGS` 是 DSH `LANG_ALIASES` 的快照（对齐 108 条）。DSH 加语言后这份快照会落后，落后只会让它多管一门 DSH 也在管的高亮 —— 撤回兜底能保证不出现双份，但会白干一次高亮；想干净就跟着同步。
 - mermaid 12 的新图种（`usecase-beta`、`agentflow-beta`）标识符只认字母数字下划线，中文得写进标签：`actor Customer("用户")` 可以，`actor 用户` 会解析失败。
 - 高亮约 6.4 MB、mermaid 约 5.0 MB，按需下载，第一次用到时多花约 100ms 解析。
 - 依赖宿主 `.md-code-block`、`[data-code-block-content]`、`[data-code-block-banner]`、`data-streaming` 这几个钩子，DSH 改了要跟着改 `src/client.js` 顶部的常量和 `MMD_TYPE`。

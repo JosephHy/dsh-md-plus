@@ -43,17 +43,28 @@ window.__ModuleLoader__.load({
     var RUNTIME_ATTR = "data-md-plus-runtime";
     var DEBOUNCE_MS = 160;
 
-    // DSH 自带高亮的语言（它内部 LANG_ALIASES 的镜像）。这些一律不碰：
-    // 它的懒加载语法有「先出纯文本、后换高亮」的窗口，抢过来会撞成两份。
+    // DSH 自带高亮的语言别名，对齐 dsh-client-ui-primitives/lib/index.js 里的 LANG_ALIASES。
+    // 这些一律不碰：它的懒加载语法有「先出纯文本、后换高亮」的窗口，抢过来会撞成两份。
+    // 表会随 DSH 加语言而过期，所以 releaseTakenOver() 还要兜一层底。
     var DSH_LANGS = new Set([
       "typescript", "ts", "tsx", "javascript", "js", "jsx",
-      "shellscript", "bash", "sh", "shell", "zsh",
-      "json", "jsonc",
-      "py", "python", "rb", "ruby", "go", "rs", "rust",
-      "java", "c", "cpp", "cs", "csharp", "kotlin", "swift", "php",
-      "yaml", "yml", "toml", "ini",
-      "md", "markdown", "mdx",
-      "html", "css", "scss", "less", "sql", "xml", "lua",
+      "shellscript", "bash", "sh", "shell", "zsh", "json",
+      "jsonc", "py", "python", "rb", "ruby", "go",
+      "rs", "rust", "java", "c", "cpp", "cs",
+      "csharp", "kotlin", "swift", "php", "yaml", "yml",
+      "toml", "ini", "md", "markdown", "mdx", "html",
+      "css", "scss", "less", "sql", "xml", "lua",
+      "bat", "batch", "powershell", "ps1", "ps", "fish",
+      "properties", "dotenv", "env", "log", "csv", "diff",
+      "patch", "http", "rst", "latex", "tex", "bibtex",
+      "bib", "asciidoc", "adoc", "r", "julia", "jl",
+      "dart", "scala", "clojure", "clj", "erlang", "erl",
+      "elixir", "ex", "exs", "haskell", "hs", "fsharp",
+      "fs", "fsi", "fsx", "vb", "vbnet", "perl",
+      "pl", "pm", "verilog", "v", "system-verilog", "systemverilog",
+      "sv", "svh", "graphql", "gql", "proto", "protobuf",
+      "hcl", "tf", "tfvars", "nix", "vue", "svelte",
+      "make", "makefile", "mk", "cmake", "groovy", "gradle",
     ]);
 
     // mermaid 系围栏由本插件自己画。
@@ -389,12 +400,34 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /**
+     * DSH 自己接管了这块就撤回我们的副本。
+     *
+     * 它的语法是懒加载的：语法没到位时先渲染 <pre class="plain">，到位后 React 把那个 pre
+     * 换成自己的高亮节点——我们插在旁边的那份副本 React 不认识，不会被一起收走，
+     * 于是同一份代码会留下两遍（而且此后每轮扫描都因为「第一个 pre 是 DSH 的 shiki」
+     * 而不再回头看它）。DSH_LANGS 漏掉的语言由这里兜底。
+     *
+     * @returns 是否撤掉了副本。
+     */
+    function releaseTakenOver(block, content) {
+      var host = content.querySelector("." + HOST_CLASS);
+      if (host === null) return false;
+      // md-plus-pre 是我们插的，没有它才是 DSH 自己渲出来的
+      if (content.querySelector("pre.shiki:not(.md-plus-pre)") === null) return false;
+      host.remove();
+      block.removeAttribute(KEY_ATTR);
+      block.removeAttribute(DONE_ATTR);
+      return true;
+    }
+
     async function enhance(block) {
       if (!block.isConnected) return;
       // 流式输出期间源码每帧都在变，等它定稿再处理（data-streaming 消失时会重新扫描）
       if (block.closest("[data-streaming]") !== null) return;
       var content = block.querySelector(CONTENT);
       if (content === null) return;
+      if (releaseTakenOver(block, content)) return;
 
       var pre = content.querySelector("pre");
       // pre.shiki = DSH 自己已经上过色了

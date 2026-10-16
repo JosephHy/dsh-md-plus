@@ -111,8 +111,8 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, DEBOUNCE_MS + 
 test("给 DSH 不认识的语言补上高亮", async () => {
   mount();
   document.body.innerHTML = codeBlockHtml(
-    "dart",
-    "/// 各组件订阅的数据键\nList<String> _textDataKeys = const [];",
+    "gdscript",
+    "# 各组件订阅的数据键\nvar _textDataKeys := []",
   );
   await settle();
 
@@ -129,21 +129,44 @@ test("给 DSH 不认识的语言补上高亮", async () => {
 
 test("原 <pre> 留在原位，DSH 的复制按钮仍读到纯文本", async () => {
   mount();
-  document.body.innerHTML = codeBlockHtml("dart", "void main() {}");
+  document.body.innerHTML = codeBlockHtml("gdscript", "func _ready() {}");
   await settle();
 
   const block = document.querySelector(".md-code-block");
   const first = block.querySelector("pre");
   assert.equal(first.classList.contains("md-plus-pre"), false, "第一个 pre 必须还是原始节点");
-  assert.equal(first.textContent, "void main() {}", "复制拿到的应是源码原文");
+  assert.equal(first.textContent, "func _ready() {}", "复制拿到的应是源码原文");
 });
 
 test("DSH 自己高亮的语言不碰", async () => {
+  // dart / scala / vue 这些是 DSH 后来加进语言表的，插件这边漏一个就会同一份代码画两遍
+  for (const lang of ["python", "dart", "scala", "vue", "powershell", "csv", "graphql"]) {
+    mount();
+    document.body.innerHTML = codeBlockHtml(lang, "int a = 1;");
+    await settle();
+    assert.equal(tagOf(document.querySelector(".md-plus-hl")), "null", `${lang} 不该补高亮`);
+    assert.equal(document.querySelector(".md-code-block").getAttribute("data-md-plus"), null);
+  }
+});
+
+test("DSH 懒加载语法到位后接管，撤回我们插的副本", async () => {
   mount();
-  document.body.innerHTML = codeBlockHtml("python", "print(1)");
+  document.body.innerHTML = codeBlockHtml("gdscript", "func _ready() {}");
   await settle();
-  assert.equal(tagOf(document.querySelector(".md-plus-hl")), "null");
-  assert.equal(document.querySelector(".md-code-block").getAttribute("data-md-plus"), null);
+  const content = document.querySelector("[data-code-block-content]");
+  assert.ok(content.querySelector(".md-plus-hl"), "先由插件补色");
+
+  // 语法 import 完成：React 把它那个 plain <pre> 整个换成高亮 <div>
+  const replacement = document.createElement("div");
+  replacement.innerHTML =
+    '<pre class="shiki css-variables"><code>func _ready() {}</code></pre>';
+  content.querySelector("pre:not(.md-plus-pre)").replaceWith(replacement);
+  await settle();
+
+  const block = document.querySelector(".md-code-block");
+  assert.equal(content.querySelectorAll("pre").length, 1, "不能留下两份代码");
+  assert.equal(tagOf(content.querySelector(".md-plus-hl")), "null", "副本要撤回");
+  assert.equal(block.getAttribute("data-md-plus"), null);
 });
 
 test("已被 DSH 上色的块不重复处理", async () => {
@@ -553,7 +576,7 @@ test("卸载时把图形和失败提示一起摘掉", async () => {
 test("流式输出期间不动手，定稿后补上", async () => {
   mount();
   document.body.innerHTML =
-    '<div data-streaming="true">' + codeBlockHtml("dart", "List<int> a = [") + "</div>";
+    '<div data-streaming="true">' + codeBlockHtml("gdscript", "var a = [") + "</div>";
   await settle();
   assert.equal(tagOf(document.querySelector(".md-plus-hl")), "null", "流式中不该插入");
 
@@ -565,11 +588,11 @@ test("流式输出期间不动手，定稿后补上", async () => {
 
 test("源码变了会重新上色", async () => {
   mount();
-  document.body.innerHTML = codeBlockHtml("dart", "int a = 1;");
+  document.body.innerHTML = codeBlockHtml("gdscript", "var a = 1");
   await settle();
   const before = document.querySelector(".md-plus-hl");
 
-  document.querySelector(".md-code-block code").textContent = "int a = 2;";
+  document.querySelector(".md-code-block code").textContent = "var a = 2";
   await settle();
 
   const blocks = document.querySelectorAll(".md-plus-hl");
@@ -580,7 +603,7 @@ test("源码变了会重新上色", async () => {
 
 test("插自己的节点不会自激成死循环", async () => {
   mount();
-  document.body.innerHTML = codeBlockHtml("dart", "int a = 1;");
+  document.body.innerHTML = codeBlockHtml("gdscript", "var a = 1");
   await settle();
   await settle();
   assert.equal(document.querySelectorAll(".md-plus-hl").length, 1);

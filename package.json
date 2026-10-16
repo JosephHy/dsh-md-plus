@@ -1,6 +1,6 @@
 {
   "name": "dsh-md-plus",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Markdown display enhancements for DeepSeek Harness Web: code block restyle, syntax highlighting for languages DSH does not ship, and built-in mermaid diagrams.",
   "type": "module",
   "main": "lib/index.js",
