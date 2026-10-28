@@ -60,7 +60,7 @@ const mermaidStub = {
   async render(id, code, dark) {
     this.calls.push({ id, code, dark });
     if (code.includes("BOOM")) throw new Error("Parse error on line 2");
-    return `<svg data-stub="1" data-id="${id}"></svg>`;
+    return `<svg data-stub="1" data-id="${id}" viewBox="0 0 320 200" width="100%"></svg>`;
   },
 };
 
@@ -345,17 +345,17 @@ test("图形被包进 viewport / stage 两层", async () => {
   assert.ok(viewport.querySelector(".md-plus-mmd-stage svg"), "stage 里才是 svg");
 });
 
-test("头部四颗按钮：缩小 / 放大 / 切换 / 复制", async () => {
+test("头部五颗按钮：缩小 / 放大 / 切换 / 全屏 / 复制", async () => {
   const block = await mermaidBlock();
   const buttons = [...block.querySelectorAll("[data-code-block-banner] button")];
   assert.deepEqual(
     buttons.map((b) => b.classList.contains("md-plus-btn")),
-    [true, true, true, false],
+    [true, true, true, true, false],
     "最后那颗是 DSH 原生的复制按钮",
   );
   assert.deepEqual(
-    buttons.slice(0, 3).map((b) => [...b.classList].filter((c) => c !== "md-plus-btn")),
-    [["md-plus-zoom-out"], ["md-plus-zoom-in"], ["md-plus-toggle"]],
+    buttons.slice(0, 4).map((b) => [...b.classList].filter((c) => c !== "md-plus-btn")),
+    [["md-plus-zoom-out"], ["md-plus-zoom-in"], ["md-plus-toggle"], ["md-plus-expand"]],
   );
 });
 
@@ -371,6 +371,30 @@ test("点放大 / 缩小改变 scale", async () => {
   block.querySelector(".md-plus-zoom-out").dispatchEvent(new window.Event("click"));
   assert.match(stageTransform(block), /scale\(1\)$/);
   assert.equal(block.getAttribute("data-md-plus-zoom"), "min");
+});
+
+test("全屏查看复制当前图，按 Esc 关闭", async () => {
+  const block = await mermaidBlock();
+  block.querySelector(".md-plus-expand").dispatchEvent(new window.Event("click"));
+
+  const modal = document.querySelector(".md-plus-mmd-modal");
+  assert.ok(modal, "点全屏应该挂出覆盖层");
+  const clone = modal.querySelector(".md-plus-mmd-modal-stage svg");
+  assert.ok(clone, "覆盖层里要有图的副本");
+  assert.equal(clone.getAttribute("width"), "320", "副本按 viewBox 恢复原始宽度");
+  assert.equal(clone.getAttribute("height"), "200", "副本按 viewBox 恢复原始高度");
+  assert.equal(modal.querySelector(".md-plus-expand"), null, "覆盖层里不该再套一个全屏按钮");
+
+  document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  assert.equal(tagOf(document.querySelector(".md-plus-mmd-modal")), "null", "Esc 要关闭覆盖层");
+});
+
+test("宿主按钮已有 SVG 图标时不再叠加复制图标", async () => {
+  mount();
+  await settle();
+  const css = stylesheet();
+  assert.match(css, /button:not\(:has\(svg\)\)::before/, "只给没有 SVG 的按钮补图标");
+  assert.doesNotMatch(css, /\[data-code-block-banner\] button::before/, "不能对所有原生按钮硬加复制图标");
 });
 
 test("缩到最小后再点缩小不越界", async () => {

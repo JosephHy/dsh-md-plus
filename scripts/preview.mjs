@@ -269,6 +269,7 @@ function mermaidCard({ id }, svg) {
     '<button type="button" class="md-plus-btn md-plus-zoom-out" title="缩小"></button>' +
     '<button type="button" class="md-plus-btn md-plus-zoom-in" title="放大"></button>' +
     '<button type="button" class="md-plus-btn md-plus-toggle" title="切换图形 / 代码"></button>' +
+    '<button type="button" class="md-plus-btn md-plus-expand" title="全屏查看"></button>' +
     `<button type="button" class="${CB.get("copyButton")}">复制</button>` +
     "</div></div></div>" +
     `<div class="${CB.get("content")}" data-code-block-content>` +

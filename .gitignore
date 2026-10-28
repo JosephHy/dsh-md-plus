@@ -13,3 +13,5 @@ RELEASES.local.md
 
 # 切 profile 成本地目录装之前做的配置备份
 .local-backup/
+
+AGENTS.md

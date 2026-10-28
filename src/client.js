@@ -35,6 +35,11 @@ window.__ModuleLoader__.load({
     var ZOOM_ATTR = "data-md-plus-zoom";
     var ZOOM_STEP = 1.25;
     var ZOOM_MAX = 6;
+    var ZOOM_MIN_INLINE = 1;
+    var ZOOM_MIN_MODAL = 0.1;
+    var ZOOM_MIN_EPSILON = 0.001;
+    var EXPAND_CLASS = "md-plus-expand";
+    var MODAL_CLASS = "md-plus-mmd-modal";
     var DONE_ATTR = "data-md-plus";
     var KEY_ATTR = "data-md-plus-key";
     var WRAP_ATTR = "data-md-plus-wrap";
@@ -111,6 +116,9 @@ window.__ModuleLoader__.load({
     var ICON_ZOOM_OUT = icon(
       "<circle cx='10.5' cy='10.5' r='7'/><path d='M20.5 20.5 15.6 15.6'/><path d='M7.5 10.5h6'/>",
     );
+    var ICON_EXPAND = icon(
+      "<path d='M8 3H3v5'/><path d='M16 3h5v5'/><path d='M3 16v5h5'/><path d='M21 16v5h-5'/>",
+    );
 
     // 表格抓手：结构选择器 + markdown 容器作用域，见 CSS 里的说明
     var TABLE = '[class*="_markdown_"] div:has(> table)';
@@ -123,7 +131,7 @@ window.__ModuleLoader__.load({
 
     var CSS = [
       // ── 卡片：整块一个底色，顶栏不再是独立色带 ──────────────────────
-      ".md-code-block{--md-plus-mmd-min-height:200px;--md-plus-icon:" + ICON_CODE + ";--md-plus-icon-copy:" + ICON_COPY + ";--md-plus-icon-nowrap:" + ICON_NOWRAP + ";--md-plus-icon-diagram:" + ICON_DIAGRAM + ";--md-plus-icon-zoom-in:" + ICON_ZOOM_IN + ";--md-plus-icon-zoom-out:" + ICON_ZOOM_OUT + "}",
+      ".md-code-block{--md-plus-mmd-min-height:200px;--md-plus-icon:" + ICON_CODE + ";--md-plus-icon-copy:" + ICON_COPY + ";--md-plus-icon-nowrap:" + ICON_NOWRAP + ";--md-plus-icon-diagram:" + ICON_DIAGRAM + ";--md-plus-icon-zoom-in:" + ICON_ZOOM_IN + ";--md-plus-icon-zoom-out:" + ICON_ZOOM_OUT + ";--md-plus-icon-expand:" + ICON_EXPAND + "}",
       // bannerWrap 的原底色是 --dsw-alias-bg-base（#fff），会跟卡片灰拉开一条带
       ".md-code-block > div:has(> " + BANNER + "){background:transparent}",
 
@@ -145,7 +153,7 @@ window.__ModuleLoader__.load({
       // ── 头部按钮：文字换成图标 ──────────────────────────────────────
       ".md-code-block " + BANNER + " button{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:0;border-radius:6px;font-size:0;cursor:pointer;background:transparent;color:var(--dsw-alias-label-tertiary);transition:background-color .12s ease,color .12s ease}",
       // font-size:0 只藏住「复制 / 已复制」的字面，可访问名仍在
-      ".md-code-block " + BANNER + " button::before{content:'';width:15px;height:15px;background:currentColor;-webkit-mask:var(--md-plus-icon-copy) center/contain no-repeat;mask:var(--md-plus-icon-copy) center/contain no-repeat}",
+      ".md-code-block " + BANNER + " button:not(:has(svg))::before{content:'';width:15px;height:15px;background:currentColor;-webkit-mask:var(--md-plus-icon-copy) center/contain no-repeat;mask:var(--md-plus-icon-copy) center/contain no-repeat}",
       ".md-code-block " + BANNER + " button:hover{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover,rgb(127 127 127 / 12%))}",
       ".md-code-block " + BANNER + " button:focus-visible{outline:2px solid var(--dsw-alias-button-primary-fill,#4c6ef5);outline-offset:1px}",
 
@@ -158,6 +166,7 @@ window.__ModuleLoader__.load({
       ".md-code-block " + BANNER + " ." + TOGGLE_CLASS + "::before{-webkit-mask:var(--md-plus-icon-diagram) center/contain no-repeat;mask:var(--md-plus-icon-diagram) center/contain no-repeat}",
       ".md-code-block " + BANNER + " ." + ZOOM_IN_CLASS + "::before{-webkit-mask:var(--md-plus-icon-zoom-in) center/contain no-repeat;mask:var(--md-plus-icon-zoom-in) center/contain no-repeat}",
       ".md-code-block " + BANNER + " ." + ZOOM_OUT_CLASS + "::before{-webkit-mask:var(--md-plus-icon-zoom-out) center/contain no-repeat;mask:var(--md-plus-icon-zoom-out) center/contain no-repeat}",
+      ".md-code-block " + BANNER + " ." + EXPAND_CLASS + "::before{-webkit-mask:var(--md-plus-icon-expand) center/contain no-repeat;mask:var(--md-plus-icon-expand) center/contain no-repeat}",
       '[' + MMD_ATTR + '="diagram"] .' + TOGGLE_CLASS + "{color:var(--dsw-alias-button-primary-fill,#4c6ef5);background:var(--dsw-alias-interactive-bg-active,rgb(76 110 245 / 12%))}",
       // 已经到最小 / 最大时，对应那颗按钮变淡且不可点
       '[' + ZOOM_ATTR + '="min"] .' + ZOOM_OUT_CLASS + ",[" + ZOOM_ATTR + '="max"] .' + ZOOM_IN_CLASS + "{opacity:.3;pointer-events:none}",
@@ -175,6 +184,19 @@ window.__ModuleLoader__.load({
       "." + MMD_CLASS + "-stage{transform-origin:0 0;display:flex;flex-direction:column;justify-content:center;min-height:var(--md-plus-mmd-min-height)}",
       "." + MMD_CLASS + " svg{display:block;margin:0 auto;max-width:100%;height:auto}",
       "." + MMD_CLASS + "-error{margin:0 16px 12px;padding:8px 12px;border-radius:8px;font:12px/18px var(--ds-font-family-code,monospace);white-space:pre-wrap;color:var(--dsw-alias-state-error-primary,#d33);background:var(--dsw-alias-bg-layer-2,rgb(127 127 127 / 8%))}",
+
+      // ── 全屏查看：复杂时序图不挤在聊天栏里，默认按整图铺满视口 ─────
+      "." + MODAL_CLASS + "{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:calc(var(--dsh-windows-titlebar-height,0px) + 16px) 24px 24px;background:rgb(0 0 0 / 48%)}",
+      "." + MODAL_CLASS + "-panel{display:flex;flex-direction:column;width:min(1600px,100%);height:min(1000px,100%);overflow:hidden;border:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 18%));border-radius:12px;background:var(--dsw-alias-bg-base,#fff);box-shadow:0 24px 80px rgb(0 0 0 / 25%)}",
+      "." + MODAL_CLASS + "-bar{display:flex;align-items:center;gap:8px;flex:none;padding:10px 16px;border-bottom:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 18%))}",
+      "." + MODAL_CLASS + "-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 13px/18px var(--dsw-font-family-sans,system-ui,sans-serif);color:var(--dsw-alias-label-primary)}",
+      "." + MODAL_CLASS + "-actions{display:flex;align-items:center;gap:6px;flex:none}",
+      "." + MODAL_CLASS + "-actions button{appearance:none;border:0;border-radius:6px;padding:5px 10px;background:var(--dsw-alias-interactive-bg-hover,rgb(127 127 127 / 12%));color:var(--dsw-alias-label-primary);font:12px/18px var(--dsw-font-family-sans,system-ui,sans-serif);cursor:pointer}",
+      "." + MODAL_CLASS + "-actions button:hover{background:var(--dsw-alias-interactive-bg-active,rgb(76 110 245 / 12%))}",
+      "." + MODAL_CLASS + "-body{display:flex;flex:1;min-height:0;padding:16px}",
+      "." + MODAL_CLASS + "-viewport{flex:1;min-height:0}",
+      "." + MODAL_CLASS + "-stage{display:inline-flex;align-items:center;justify-content:center;min-height:0;flex:none}",
+      "." + MODAL_CLASS + " svg{display:block}",
 
       // 高亮宿主不参与布局，让里面的 <pre> 直接吃到卡片样式
       "." + HOST_CLASS + "{display:contents}",
@@ -371,13 +393,23 @@ window.__ModuleLoader__.load({
           block.setAttribute(MMD_ATTR, next);
         },
       },
+      {
+        cls: EXPAND_CLASS,
+        title: "全屏查看",
+        aria: "全屏查看流程图",
+        run: (block) => openFullscreen(block),
+      },
     ];
 
     /** 头部按钮按块的语言整组对齐：该有的补上，不该在的摘掉。 */
     function decorate(block) {
       if (!block.isConnected) return;
       var banner = block.querySelector(BANNER);
-      var copy = banner?.querySelector("button:not(." + BTN_CLASS + ")");
+      var nativeButtons = banner?.querySelectorAll("button:not(." + BTN_CLASS + ")");
+      var copy =
+        nativeButtons === undefined || nativeButtons.length === 0
+          ? null
+          : nativeButtons[nativeButtons.length - 1];
       var action = copy?.parentElement;
       if (action === null || action === undefined) return;
 
@@ -540,7 +572,7 @@ window.__ModuleLoader__.load({
     function zoomState(block) {
       var state = zooms.get(block);
       if (state === undefined) {
-        state = { scale: 1, x: 0, y: 0 };
+        state = { scale: 1, x: 0, y: 0, min: ZOOM_MIN_INLINE };
         zooms.set(block, state);
       }
       return state;
@@ -561,7 +593,11 @@ window.__ModuleLoader__.load({
       stage.parentElement.setAttribute("data-zoomed", state.scale > 1.001 ? "on" : "off");
       block.setAttribute(
         ZOOM_ATTR,
-        state.scale <= 1.001 ? "min" : state.scale >= ZOOM_MAX ? "max" : "mid",
+        state.scale <= state.min + ZOOM_MIN_EPSILON
+          ? "min"
+          : state.scale >= ZOOM_MAX
+            ? "max"
+            : "mid",
       );
     }
 
@@ -590,7 +626,7 @@ window.__ModuleLoader__.load({
       var stage = stageOf(block);
       if (stage === null) return;
       var state = zoomState(block);
-      var next = Math.min(ZOOM_MAX, Math.max(1, state.scale * factor));
+      var next = Math.min(ZOOM_MAX, Math.max(state.min, state.scale * factor));
       if (Math.abs(next - state.scale) < 0.001) return;
       var box = stage.parentElement.getBoundingClientRect();
       var anchorX = (clientX ?? box.left + box.width / 2) - box.left;
@@ -603,8 +639,8 @@ window.__ModuleLoader__.load({
       paint(block);
     }
 
-    /** 滚轮缩放 + 放大后拖拽；双击回到 100%。 */
-    function bindViewport(block, viewport) {
+    /** 滚轮缩放 + 放大后拖拽；双击回到 100%，全屏里双击回到整图。 */
+    function bindViewport(block, viewport, resetView) {
       var drag = null;
 
       viewport.addEventListener(
@@ -654,9 +690,149 @@ window.__ModuleLoader__.load({
       viewport.addEventListener("pointercancel", stopDrag);
 
       viewport.addEventListener("dblclick", () => {
+        if (resetView !== undefined) {
+          resetView();
+          return;
+        }
         zooms.delete(block);
         paint(block);
       });
+    }
+
+    /** 把图缩放到视口内能看见整张图；聊天内 viewport 高度跟图走，只有全屏用得上。 */
+    function fitToView(scope) {
+      var stage = stageOf(scope);
+      if (stage === null) return;
+      var box = stage.parentElement.getBoundingClientRect();
+      var svg = stage.querySelector("svg");
+      var width = stage.offsetWidth || parseFloat(svg?.getAttribute("width") ?? "") || 0;
+      var height = stage.offsetHeight || parseFloat(svg?.getAttribute("height") ?? "") || 0;
+      if (box.width <= 0 || box.height <= 0 || width <= 0 || height <= 0) return;
+
+      var state = zoomState(scope);
+      var scale = Math.min(1, (box.width - 32) / width, (box.height - 32) / height);
+      state.scale = Math.max(state.min, scale);
+      state.x = 0;
+      state.y = 0;
+      clampPan(scope, state);
+      paint(scope);
+    }
+
+    /** 从 SVG 的 viewBox 取原始尺寸；Mermaid 输出的 width="100%" 不能直接拿来算。 */
+    function svgSize(svg) {
+      var box = (svg.getAttribute("viewBox") ?? "").trim().split(/[\s,]+/).map(Number);
+      if (box.length === 4 && box[2] > 0 && box[3] > 0) {
+        return { width: box[2], height: box[3] };
+      }
+      var rect = svg.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    }
+
+    /** 全屏查看：复制当前 SVG 到覆盖层，默认适应整图，适合很密的长时序图。 */
+    function openFullscreen(block) {
+      if (document.querySelector("." + MODAL_CLASS) !== null) return;
+      var svg = block.querySelector("." + MMD_CLASS + " svg");
+      if (svg === null) return;
+      var size = svgSize(svg);
+
+      var overlay = document.createElement("div");
+      overlay.className = MODAL_CLASS;
+      overlay.setAttribute("role", "dialog");
+      overlay.setAttribute("aria-modal", "true");
+      overlay.setAttribute("aria-label", "流程图全屏查看");
+
+      var panel = document.createElement("div");
+      panel.className = MODAL_CLASS + "-panel";
+
+      var bar = document.createElement("div");
+      bar.className = MODAL_CLASS + "-bar";
+      var title = document.createElement("div");
+      title.className = MODAL_CLASS + "-title";
+      title.textContent = "流程图";
+      var actions = document.createElement("div");
+      actions.className = MODAL_CLASS + "-actions";
+
+      var fitButton = document.createElement("button");
+      fitButton.type = "button";
+      fitButton.textContent = "适应整图";
+      var zoomOut = document.createElement("button");
+      zoomOut.type = "button";
+      zoomOut.textContent = "−";
+      zoomOut.setAttribute("aria-label", "缩小");
+      var zoomIn = document.createElement("button");
+      zoomIn.type = "button";
+      zoomIn.textContent = "+";
+      zoomIn.setAttribute("aria-label", "放大");
+      var closeButton = document.createElement("button");
+      closeButton.type = "button";
+      closeButton.textContent = "关闭";
+      actions.appendChild(fitButton);
+      actions.appendChild(zoomOut);
+      actions.appendChild(zoomIn);
+      actions.appendChild(closeButton);
+      bar.appendChild(title);
+      bar.appendChild(actions);
+      panel.appendChild(bar);
+
+      var body = document.createElement("div");
+      body.className = MODAL_CLASS + "-body";
+      var viewport = document.createElement("div");
+      viewport.className = MMD_CLASS + "-viewport " + MODAL_CLASS + "-viewport";
+      var stage = document.createElement("div");
+      stage.className = MMD_CLASS + "-stage " + MODAL_CLASS + "-stage";
+
+      var clone = svg.cloneNode(true);
+      if (size.width > 0 && size.height > 0) {
+        clone.setAttribute("width", String(size.width));
+        clone.setAttribute("height", String(size.height));
+        clone.style.width = size.width + "px";
+        clone.style.height = size.height + "px";
+      }
+      clone.style.maxWidth = "none";
+      stage.appendChild(clone);
+      viewport.appendChild(stage);
+      body.appendChild(viewport);
+      panel.appendChild(body);
+      overlay.appendChild(panel);
+
+      var previousFocus = document.activeElement;
+      var previousOverflow = document.documentElement.style.overflow;
+      var closed = false;
+      var reset = () => fitToView(overlay);
+      function closeViewer() {
+        if (closed) return;
+        closed = true;
+        document.removeEventListener("keydown", onKey, true);
+        overlay.remove();
+        document.documentElement.style.overflow = previousOverflow;
+        zooms.delete(overlay);
+        if (previousFocus !== null && typeof previousFocus.focus === "function") {
+          previousFocus.focus();
+        }
+      }
+      function onKey(event) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeViewer();
+        }
+      }
+
+      overlay.addEventListener("pointerdown", (event) => {
+        if (event.target === overlay) closeViewer();
+      });
+      fitButton.addEventListener("click", reset);
+      zoomOut.addEventListener("click", () => zoomBy(overlay, 1 / ZOOM_STEP));
+      zoomIn.addEventListener("click", () => zoomBy(overlay, ZOOM_STEP));
+      closeButton.addEventListener("click", closeViewer);
+      document.addEventListener("keydown", onKey, true);
+
+      zooms.set(overlay, { scale: 1, x: 0, y: 0, min: ZOOM_MIN_MODAL });
+      bindViewport(overlay, viewport, reset);
+      document.documentElement.style.overflow = "hidden";
+      document.body.appendChild(overlay);
+      closeButton.focus();
+      var schedule = window.requestAnimationFrame ?? ((cb) => window.setTimeout(cb, 0));
+      schedule(reset);
     }
 
     /** 画不出来就退回源码，并在卡片里挂一行原因——总比默默消失强。 */
@@ -692,10 +868,11 @@ window.__ModuleLoader__.load({
           for (const node of injected) node.remove();
           injected.clear();
           for (const node of document.querySelectorAll(
-            "." + MMD_CLASS + ", ." + MMD_CLASS + "-error",
+            "." + MMD_CLASS + ", ." + MMD_CLASS + "-error, ." + MODAL_CLASS,
           )) {
             node.remove();
           }
+          document.documentElement.style.overflow = "";
           document.querySelector("style[" + STYLE_ATTR + "]")?.remove();
           for (const script of document.querySelectorAll("script[" + RUNTIME_ATTR + "]")) {
             script.remove();
