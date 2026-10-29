@@ -2,7 +2,7 @@
 
 给 DeepSeek Harness Web / Desktop 的 Markdown 阅读增强插件：重做代码块卡片、给 DSH 不认识的语言补语法高亮、自己渲染 mermaid 图形、重做表格样式并支持复制、图片点击放大，以及一个调整显示参数的设置面板。
 
-![dsh-md-plus 显示效果预览](<docs/preview.png>)
+[![dsh-md-plus 显示效果预览](<docs/preview.png>)](https://josephhy.github.io/dsh-md-plus/docs/showcase/)
 
 ## 功能
 
