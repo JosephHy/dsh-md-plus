@@ -57,8 +57,8 @@ let api;
 /** 假的 mermaid 运行时：只替换渲染器这一个边界，客户端半的逻辑仍然全走真的。 */
 const mermaidStub = {
   calls: [],
-  async render(id, code, dark) {
-    this.calls.push({ id, code, dark });
+  async render(id, code, dark, theme) {
+    this.calls.push({ id, code, dark, theme });
     if (code.includes("BOOM")) throw new Error("Parse error on line 2");
     return `<svg data-stub="1" data-id="${id}" viewBox="0 0 320 200" width="100%"></svg>`;
   },
@@ -102,6 +102,7 @@ function mount() {
   // 卸载回调会清掉运行时全局；重装时把桩放回去（真机上这一步等于重新下载运行时）
   window.__DSH_MD_PLUS_HL__ ??= hlRuntime;
   window.__DSH_MD_PLUS_MMD__ ??= mermaidStub;
+  window.localStorage.clear();
   api.apply(ctx);
   return ctx;
 }
@@ -253,7 +254,8 @@ test("占位文案不会被当成图：普通代码留在代码形态", async ()
   const block = document.querySelector(".md-code-block");
   assert.equal(window.__DSH_MD_PLUS_MMD__.calls.length, 0, "普通代码不该被送去画图");
   assert.equal(block.hasAttribute("data-md-plus-mmd"), false, "不该标成图块");
-  assert.ok(block.querySelector(".md-plus-tool"), "头部仍是普通块的按钮组");
+  assert.equal(tagOf(block.querySelector(".md-plus-tool")), "null", "DSH 已有原生换行按钮时不应再加一颗");
+  assert.equal(block.querySelectorAll("[data-code-block-banner] button").length, 2, "保留原生换行与复制");
   const src = block.querySelector("[data-code-block-content] pre");
   assert.equal(src.textContent, "void main() {}", "源码原样留着，复制仍拿到原文");
 });
@@ -345,17 +347,17 @@ test("图形被包进 viewport / stage 两层", async () => {
   assert.ok(viewport.querySelector(".md-plus-mmd-stage svg"), "stage 里才是 svg");
 });
 
-test("头部五颗按钮：缩小 / 放大 / 切换 / 全屏 / 复制", async () => {
+test("头部六颗按钮：缩小 / 放大 / 切换 / 全屏 / 配色 / 复制", async () => {
   const block = await mermaidBlock();
   const buttons = [...block.querySelectorAll("[data-code-block-banner] button")];
   assert.deepEqual(
     buttons.map((b) => b.classList.contains("md-plus-btn")),
-    [true, true, true, true, false],
+    [true, true, true, true, true, false],
     "最后那颗是 DSH 原生的复制按钮",
   );
   assert.deepEqual(
-    buttons.slice(0, 4).map((b) => [...b.classList].filter((c) => c !== "md-plus-btn")),
-    [["md-plus-zoom-out"], ["md-plus-zoom-in"], ["md-plus-toggle"], ["md-plus-expand"]],
+    buttons.slice(0, 5).map((b) => [...b.classList].filter((c) => c !== "md-plus-btn")),
+    [["md-plus-zoom-out"], ["md-plus-zoom-in"], ["md-plus-toggle"], ["md-plus-expand"], ["md-plus-theme"]],
   );
 });
 
@@ -384,17 +386,59 @@ test("全屏查看复制当前图，按 Esc 关闭", async () => {
   assert.equal(clone.getAttribute("width"), "320", "副本按 viewBox 恢复原始宽度");
   assert.equal(clone.getAttribute("height"), "200", "副本按 viewBox 恢复原始高度");
   assert.equal(modal.querySelector(".md-plus-expand"), null, "覆盖层里不该再套一个全屏按钮");
+  assert.deepEqual(
+    [...modal.querySelectorAll(".md-plus-mmd-modal-actions button")].slice(0, 3).map((b) => b.textContent),
+    ["适应整图", "下载 SVG", "下载 PNG"],
+    "工具栏要提供两种导出",
+  );
 
   document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   assert.equal(tagOf(document.querySelector(".md-plus-mmd-modal")), "null", "Esc 要关闭覆盖层");
+});
+
+test("Mermaid 配色按钮循环并重画", async () => {
+  const block = await mermaidBlock();
+  block.querySelector(".md-plus-theme").dispatchEvent(new window.Event("click"));
+  await settle();
+
+  assert.equal(window.localStorage.getItem("dsh-md-plus-mermaid-theme"), "neutral");
+  assert.equal(window.__DSH_MD_PLUS_MMD__.calls.at(-1).theme, "neutral", "重画时要传入选中的配色");
 });
 
 test("宿主按钮已有 SVG 图标时不再叠加复制图标", async () => {
   mount();
   await settle();
   const css = stylesheet();
-  assert.match(css, /button:not\(:has\(svg\)\)::before/, "只给没有 SVG 的按钮补图标");
+  assert.match(css, /button:last-child:not\(:has\(svg\)\)::before/, "只给旧版没有 SVG 的复制按钮补图标");
+  assert.match(css, /\.md-plus-btn::before\{content:'';width:15px/, "插件按钮保留自己的图标底座");
   assert.doesNotMatch(css, /\[data-code-block-banner\] button::before/, "不能对所有原生按钮硬加复制图标");
+});
+
+test("长代码块超过阈值时出现展开按钮", async () => {
+  mount();
+  document.body.innerHTML = codeBlockHtml("bash", "echo hello\n".repeat(80));
+  const content = document.querySelector("[data-code-block-content]");
+  Object.defineProperty(content, "scrollHeight", { value: 900, configurable: true });
+  await settle();
+
+  assert.equal(content.getAttribute("data-md-plus-fold"), "on");
+  const toggle = content.querySelector(".md-plus-fold-toggle");
+  assert.ok(toggle, "折叠后要有展开按钮");
+  toggle.dispatchEvent(new window.Event("click"));
+  assert.equal(content.getAttribute("data-md-plus-fold"), "off");
+  assert.equal(toggle.textContent, "收起");
+});
+
+test("长表格超过阈值时出现展开按钮", async () => {
+  mount();
+  document.body.innerHTML =
+    '<div class="_markdown_x"><div id="long-table"><table><tbody><tr><td>x</td></tr></tbody></table></div></div>';
+  const table = document.querySelector("#long-table");
+  Object.defineProperty(table, "scrollHeight", { value: 900, configurable: true });
+  await settle();
+
+  assert.equal(table.getAttribute("data-md-plus-fold"), "on");
+  assert.ok(table.querySelector(".md-plus-fold-toggle"), "折叠后要有展开按钮");
 });
 
 test("缩到最小后再点缩小不越界", async () => {

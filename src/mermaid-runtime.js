@@ -19,12 +19,12 @@ function enqueue(task) {
   return run;
 }
 
-function ensureConfigured(dark) {
-  const key = dark ? "dark" : "light";
+function ensureConfigured(dark, theme) {
+  const key = (dark ? "dark" : "light") + ":" + theme;
   if (configuredFor === key) return;
   configuredFor = key;
   const family = getComputedStyle(document.body).fontFamily || "system-ui, sans-serif";
-  mermaid.initialize(buildConfig(dark, family));
+  mermaid.initialize(buildConfig(dark, family, theme));
 }
 
 /** 把节点方框改成参考图那种大圆角；mermaid 没有对应的 token。 */
@@ -56,11 +56,12 @@ window.__DSH_MD_PLUS_MMD__ = {
    * @param id - 本次渲染的唯一 id（mermaid 内部要用）。
    * @param code - 围栏里的图源。
    * @param dark - 当前是否深色主题。
+   * @param theme - 配色预设：blue / neutral / forest / contrast。
    * @returns SVG 字符串；解析失败时抛错，由调用方决定怎么回退。
    */
-  render(id, code, dark) {
+  render(id, code, dark, theme) {
     return enqueue(async () => {
-      ensureConfigured(dark === true);
+      ensureConfigured(dark === true, theme ?? "blue");
       let failure = null;
       // mermaid 的解析错误不一定抛出：配了 parseError 时它只回调，
       // 然后照常把错误卡片序列化出来当作「渲染成功」。这里两条路都堵上。

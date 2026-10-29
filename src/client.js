@@ -39,11 +39,19 @@ window.__ModuleLoader__.load({
     var ZOOM_MIN_MODAL = 0.1;
     var ZOOM_MIN_EPSILON = 0.001;
     var EXPAND_CLASS = "md-plus-expand";
+    var THEME_CLASS = "md-plus-theme";
+    var THEME_KEY = "dsh-md-plus-mermaid-theme";
+    var THEME_ORDER = ["blue", "neutral", "forest", "contrast"];
+    var THEME_LABELS = { blue: "蓝色", neutral: "中性", forest: "森林", contrast: "高对比" };
     var MODAL_CLASS = "md-plus-mmd-modal";
     var DONE_ATTR = "data-md-plus";
     var KEY_ATTR = "data-md-plus-key";
     var WRAP_ATTR = "data-md-plus-wrap";
     var MMD_ATTR = "data-md-plus-mmd";
+    var FOLD_ATTR = "data-md-plus-fold";
+    var FOLD_CLASS = "md-plus-fold";
+    var FOLD_BTN_CLASS = "md-plus-fold-toggle";
+    var FOLD_LIMITS = { code: 480, table: 520, diagram: 720 };
     var STYLE_ATTR = "data-md-plus-style";
     var RUNTIME_ATTR = "data-md-plus-runtime";
     var DEBOUNCE_MS = 160;
@@ -119,6 +127,9 @@ window.__ModuleLoader__.load({
     var ICON_EXPAND = icon(
       "<path d='M8 3H3v5'/><path d='M16 3h5v5'/><path d='M3 16v5h5'/><path d='M21 16v5h-5'/>",
     );
+    var ICON_THEME = icon(
+      "<path d='M12 3s5 5.5 5 9a5 5 0 0 1-10 0c0-3.5 5-9 5-9z'/><path d='M9.5 12a2.5 2.5 0 0 0 5 0'/>",
+    );
 
     // 表格抓手：结构选择器 + markdown 容器作用域，见 CSS 里的说明
     var TABLE = '[class*="_markdown_"] div:has(> table)';
@@ -131,7 +142,7 @@ window.__ModuleLoader__.load({
 
     var CSS = [
       // ── 卡片：整块一个底色，顶栏不再是独立色带 ──────────────────────
-      ".md-code-block{--md-plus-mmd-min-height:200px;--md-plus-icon:" + ICON_CODE + ";--md-plus-icon-copy:" + ICON_COPY + ";--md-plus-icon-nowrap:" + ICON_NOWRAP + ";--md-plus-icon-diagram:" + ICON_DIAGRAM + ";--md-plus-icon-zoom-in:" + ICON_ZOOM_IN + ";--md-plus-icon-zoom-out:" + ICON_ZOOM_OUT + ";--md-plus-icon-expand:" + ICON_EXPAND + "}",
+      ".md-code-block{--md-plus-mmd-min-height:200px;--md-plus-icon:" + ICON_CODE + ";--md-plus-icon-copy:" + ICON_COPY + ";--md-plus-icon-nowrap:" + ICON_NOWRAP + ";--md-plus-icon-diagram:" + ICON_DIAGRAM + ";--md-plus-icon-zoom-in:" + ICON_ZOOM_IN + ";--md-plus-icon-zoom-out:" + ICON_ZOOM_OUT + ";--md-plus-icon-expand:" + ICON_EXPAND + ";--md-plus-icon-theme:" + ICON_THEME + "}",
       // bannerWrap 的原底色是 --dsw-alias-bg-base（#fff），会跟卡片灰拉开一条带
       ".md-code-block > div:has(> " + BANNER + "){background:transparent}",
 
@@ -153,7 +164,9 @@ window.__ModuleLoader__.load({
       // ── 头部按钮：文字换成图标 ──────────────────────────────────────
       ".md-code-block " + BANNER + " button{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:0;border-radius:6px;font-size:0;cursor:pointer;background:transparent;color:var(--dsw-alias-label-tertiary);transition:background-color .12s ease,color .12s ease}",
       // font-size:0 只藏住「复制 / 已复制」的字面，可访问名仍在
-      ".md-code-block " + BANNER + " button:not(:has(svg))::before{content:'';width:15px;height:15px;background:currentColor;-webkit-mask:var(--md-plus-icon-copy) center/contain no-repeat;mask:var(--md-plus-icon-copy) center/contain no-repeat}",
+      ".md-code-block " + BANNER + " ." + BTN_CLASS + "::before{content:'';width:15px;height:15px;background:currentColor}",
+      // 旧版宿主的复制按钮只有文字，没有 SVG 图标，才需要补一枚；新版已有 SVG，不再叠加
+      ".md-code-block " + BANNER + " button:last-child:not(:has(svg))::before{content:'';width:15px;height:15px;background:currentColor;-webkit-mask:var(--md-plus-icon-copy) center/contain no-repeat;mask:var(--md-plus-icon-copy) center/contain no-repeat}",
       ".md-code-block " + BANNER + " button:hover{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover,rgb(127 127 127 / 12%))}",
       ".md-code-block " + BANNER + " button:focus-visible{outline:2px solid var(--dsw-alias-button-primary-fill,#4c6ef5);outline-offset:1px}",
 
@@ -167,6 +180,7 @@ window.__ModuleLoader__.load({
       ".md-code-block " + BANNER + " ." + ZOOM_IN_CLASS + "::before{-webkit-mask:var(--md-plus-icon-zoom-in) center/contain no-repeat;mask:var(--md-plus-icon-zoom-in) center/contain no-repeat}",
       ".md-code-block " + BANNER + " ." + ZOOM_OUT_CLASS + "::before{-webkit-mask:var(--md-plus-icon-zoom-out) center/contain no-repeat;mask:var(--md-plus-icon-zoom-out) center/contain no-repeat}",
       ".md-code-block " + BANNER + " ." + EXPAND_CLASS + "::before{-webkit-mask:var(--md-plus-icon-expand) center/contain no-repeat;mask:var(--md-plus-icon-expand) center/contain no-repeat}",
+      ".md-code-block " + BANNER + " ." + THEME_CLASS + "::before{-webkit-mask:var(--md-plus-icon-theme) center/contain no-repeat;mask:var(--md-plus-icon-theme) center/contain no-repeat}",
       '[' + MMD_ATTR + '="diagram"] .' + TOGGLE_CLASS + "{color:var(--dsw-alias-button-primary-fill,#4c6ef5);background:var(--dsw-alias-interactive-bg-active,rgb(76 110 245 / 12%))}",
       // 已经到最小 / 最大时，对应那颗按钮变淡且不可点
       '[' + ZOOM_ATTR + '="min"] .' + ZOOM_OUT_CLASS + ",[" + ZOOM_ATTR + '="max"] .' + ZOOM_IN_CLASS + "{opacity:.3;pointer-events:none}",
@@ -197,6 +211,12 @@ window.__ModuleLoader__.load({
       "." + MODAL_CLASS + "-viewport{flex:1;min-height:0}",
       "." + MODAL_CLASS + "-stage{display:inline-flex;align-items:center;justify-content:center;min-height:0;flex:none}",
       "." + MODAL_CLASS + " svg{display:block}",
+
+      // ── 长内容折叠：代码块、表格、图表卡共用一套按钮 ───────────────
+      "." + FOLD_CLASS + "{position:relative}",
+      "." + FOLD_CLASS + "[" + FOLD_ATTR + '="on"]{max-height:var(--md-plus-fold-max-height);overflow:hidden}',
+      "." + FOLD_BTN_CLASS + "{display:block;margin:8px auto 0;padding:4px 12px;border:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 22%));border-radius:999px;background:var(--dsw-alias-bg-base,#fff);color:var(--dsw-alias-label-primary);font:12px/18px var(--dsw-font-family-sans,system-ui,sans-serif);cursor:pointer;box-shadow:0 2px 8px rgb(0 0 0 / 12%);z-index:2}",
+      "." + FOLD_CLASS + "[" + FOLD_ATTR + '="on"] .' + FOLD_BTN_CLASS + "{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);margin:0}",
 
       // 高亮宿主不参与布局，让里面的 <pre> 直接吃到卡片样式
       "." + HOST_CLASS + "{display:contents}",
@@ -315,7 +335,7 @@ window.__ModuleLoader__.load({
     function isOurs(node) {
       var element = node?.nodeType === 1 ? node : node?.parentElement;
       return (
-        element?.closest?.("." + HOST_CLASS + ", ." + BTN_CLASS + ", ." + MMD_CLASS) != null
+        element?.closest?.("." + HOST_CLASS + ", ." + BTN_CLASS + ", ." + MMD_CLASS + ", ." + FOLD_BTN_CLASS) != null
       );
     }
 
@@ -338,6 +358,7 @@ window.__ModuleLoader__.load({
         decorate(block);
         void enhance(block);
       }
+      scanFolds();
     }
 
     function onMutations(records) {
@@ -391,6 +412,11 @@ window.__ModuleLoader__.load({
         run: (block) => {
           var next = block.getAttribute(MMD_ATTR) === "code" ? "diagram" : "code";
           block.setAttribute(MMD_ATTR, next);
+          var viewport = block.querySelector("." + MMD_CLASS + "-viewport");
+          if (viewport !== null) {
+            resetFold(viewport);
+            scheduleFold(viewport, FOLD_LIMITS.diagram);
+          }
         },
       },
       {
@@ -399,7 +425,24 @@ window.__ModuleLoader__.load({
         aria: "全屏查看流程图",
         run: (block) => openFullscreen(block),
       },
+      {
+        cls: THEME_CLASS,
+        title: "切换 Mermaid 配色",
+        aria: "切换 Mermaid 配色",
+        run: (block) => cycleMermaidTheme(block),
+      },
     ];
+
+    /** 找到宿主自带的换行按钮；新版 CodeToolbar 已经有这颗，别再补一颗。 */
+    function findNativeWrap(buttons) {
+      if (buttons === undefined) return null;
+      for (const button of buttons) {
+        var label =
+          (button.getAttribute("aria-label") ?? "") + " " + (button.title ?? "") + " " + (button.textContent ?? "");
+        if (/换行|wrap/i.test(label)) return button;
+      }
+      return buttons.length >= 2 ? buttons[0] : null;
+    }
 
     /** 头部按钮按块的语言整组对齐：该有的补上，不该在的摘掉。 */
     function decorate(block) {
@@ -413,7 +456,12 @@ window.__ModuleLoader__.load({
       var action = copy?.parentElement;
       if (action === null || action === undefined) return;
 
-      var specs = readLang(block) !== "" && diagramKind(block) !== null ? MMD_BUTTONS : PLAIN_BUTTONS;
+      var specs =
+        readLang(block) !== "" && diagramKind(block) !== null
+          ? MMD_BUTTONS
+          : findNativeWrap(nativeButtons) !== null
+            ? []
+            : PLAIN_BUTTONS;
       for (const existing of action.querySelectorAll("." + BTN_CLASS)) {
         if (specs.some((spec) => existing.classList.contains(spec.cls))) continue;
         existing.remove();
@@ -426,6 +474,11 @@ window.__ModuleLoader__.load({
         created.className = BTN_CLASS + " " + spec.cls;
         created.title = spec.title;
         created.setAttribute("aria-label", spec.aria);
+        if (spec.cls === THEME_CLASS) {
+          var themeLabel = "配色：" + (THEME_LABELS[getMermaidTheme()] ?? getMermaidTheme());
+          created.title = themeLabel;
+          created.setAttribute("aria-label", themeLabel);
+        }
         created.addEventListener("click", () => spec.run(block));
         action.insertBefore(created, copy);
         injected.add(created);
@@ -506,9 +559,41 @@ window.__ModuleLoader__.load({
       if (shikiPre === null) return;
       shikiPre.classList.add("md-plus-pre");
       content.querySelector("." + HOST_CLASS)?.remove();
+      resetFold(content);
       pre.after(host);
       block.setAttribute(KEY_ATTR, key);
       block.setAttribute(DONE_ATTR, "done");
+      scheduleFold(content, FOLD_LIMITS.code);
+    }
+
+    /** 当前 Mermaid 配色；localStorage 不可用时回退到蓝色。 */
+    function getMermaidTheme() {
+      try {
+        var saved = window.localStorage.getItem(THEME_KEY);
+        if (saved !== null && THEME_ORDER.indexOf(saved) !== -1) return saved;
+      } catch {
+        /* 隐私模式或禁用存储时保持默认 */
+      }
+      return "blue";
+    }
+
+    /** 循环切换配色，并让所有已渲染的图重画。 */
+    function cycleMermaidTheme(block) {
+      var current = getMermaidTheme();
+      var index = THEME_ORDER.indexOf(current);
+      var next = THEME_ORDER[(index + 1) % THEME_ORDER.length];
+      try {
+        window.localStorage.setItem(THEME_KEY, next);
+      } catch {
+        /* 存不下就只影响本次会话 */
+      }
+      var button = block.querySelector("." + THEME_CLASS);
+      if (button !== null) {
+        var label = "配色：" + (THEME_LABELS[next] ?? next);
+        button.title = label;
+        button.setAttribute("aria-label", label);
+      }
+      redrawDiagrams();
     }
 
     async function renderDiagram(block, content, pre) {
@@ -524,7 +609,7 @@ window.__ModuleLoader__.load({
       var svg;
       try {
         var dark = document.body.hasAttribute("data-ds-dark-theme");
-        svg = await api.render("dsh-md-plus-mmd-" + ++diagramSeq, code, dark);
+        svg = await api.render("dsh-md-plus-mmd-" + ++diagramSeq, code, dark, getMermaidTheme());
       } catch (error) {
         failDiagram(block, content, pre, key, error);
         return;
@@ -563,6 +648,7 @@ window.__ModuleLoader__.load({
       // 图换了，缩放归位
       zooms.delete(block);
       paint(block);
+      scheduleFold(viewport, FOLD_LIMITS.diagram);
     }
 
     // ── 缩放 / 平移 ───────────────────────────────────────────────────
@@ -699,6 +785,65 @@ window.__ModuleLoader__.load({
       });
     }
 
+    /** 清掉折叠状态和按钮，内容重画时重新量高度。 */
+    function resetFold(target) {
+      if (target === null) return;
+      target.removeAttribute(FOLD_ATTR);
+      target.classList.remove(FOLD_CLASS);
+      target.style.removeProperty("--md-plus-fold-max-height");
+      target.querySelector("." + FOLD_BTN_CLASS)?.remove();
+    }
+
+    /**
+     * 超过阈值才折叠，避免短代码块也被加按钮。
+     * 用 rAF 等宿主把最终高度排出来再量；量到一次就记 none/on，不再重复。
+     */
+    function scheduleFold(target, limit) {
+      if (target === null) return;
+      if (target.getAttribute(FOLD_ATTR) === "none") {
+        // 首次测量可能发生在字体/高亮还没就位时，高度变大后再给它一次机会。
+        if (target.scrollHeight <= limit) return;
+        target.removeAttribute(FOLD_ATTR);
+      }
+      if (target.getAttribute(FOLD_ATTR) !== null) return;
+      var schedule = window.requestAnimationFrame ?? ((cb) => window.setTimeout(cb, 0));
+      schedule(() => {
+        if (!target.isConnected || target.getAttribute(FOLD_ATTR) !== null) return;
+        if (target.scrollHeight <= limit) {
+          target.setAttribute(FOLD_ATTR, "none");
+          return;
+        }
+        target.setAttribute(FOLD_ATTR, "on");
+        target.classList.add(FOLD_CLASS);
+        target.style.setProperty("--md-plus-fold-max-height", limit + "px");
+        var button = document.createElement("button");
+        button.type = "button";
+        button.className = FOLD_BTN_CLASS;
+        button.textContent = "展开";
+        button.setAttribute("aria-expanded", "false");
+        button.addEventListener("click", () => {
+          var folded = target.getAttribute(FOLD_ATTR) === "on";
+          target.setAttribute(FOLD_ATTR, folded ? "off" : "on");
+          button.textContent = folded ? "收起" : "展开";
+          button.setAttribute("aria-expanded", folded ? "true" : "false");
+        });
+        target.appendChild(button);
+      });
+    }
+
+    /** 扫一遍代码块和表格，图表在 applyDiagram 里单独处理。 */
+    function scanFolds() {
+      for (const block of document.querySelectorAll(BLOCK)) {
+        if (block.closest("[data-streaming]") !== null) continue;
+        if (diagramKind(block) !== null) continue;
+        scheduleFold(block.querySelector(CONTENT), FOLD_LIMITS.code);
+      }
+      for (const table of document.querySelectorAll(TABLE)) {
+        if (table.closest("[data-streaming]") !== null) continue;
+        scheduleFold(table, FOLD_LIMITS.table);
+      }
+    }
+
     /** 把图缩放到视口内能看见整张图；聊天内 viewport 高度跟图走，只有全屏用得上。 */
     function fitToView(scope) {
       var stage = stageOf(scope);
@@ -728,6 +873,72 @@ window.__ModuleLoader__.load({
       return { width: rect.width, height: rect.height };
     }
 
+    /** 把 SVG 序列化成独立文件；补上命名空间，避免下载后某些查看器不认。 */
+    function serializeSvg(svg) {
+      var clone = svg.cloneNode(true);
+      var size = svgSize(svg);
+      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      if (!clone.getAttribute("xmlns:xlink")) {
+        clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+      }
+      if (size.width > 0) clone.setAttribute("width", String(size.width));
+      if (size.height > 0) clone.setAttribute("height", String(size.height));
+      return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+    }
+
+    /** 触发一次浏览器下载；对象 URL 稍后回收。 */
+    function downloadBlob(blob, filename) {
+      var url = URL.createObjectURL(blob);
+      var link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    /** 导出独立 SVG。 */
+    function downloadSvg(svg) {
+      try {
+        downloadBlob(new Blob([serializeSvg(svg)], { type: "image/svg+xml;charset=utf-8" }), "mermaid-diagram.svg");
+      } catch (error) {
+        console.warn("[dsh-md-plus] SVG 导出失败", error);
+      }
+    }
+
+    /** 导出 PNG：用 canvas 把独立 SVG 栅格化，按长边限制 4096px。 */
+    function downloadPng(svg) {
+      var size = svgSize(svg);
+      if (size.width <= 0 || size.height <= 0) return;
+      var image = new window.Image();
+      var objectUrl = "";
+      image.onload = function () {
+        try {
+          var scale = Math.min(2, 4096 / Math.max(size.width, size.height));
+          var canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(size.width * scale));
+          canvas.height = Math.max(1, Math.round(size.height * scale));
+          var context = canvas.getContext("2d");
+          if (context === null) throw new Error("canvas 不可用");
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob((blob) => {
+            if (blob !== null) downloadBlob(blob, "mermaid-diagram.png");
+          }, "image/png");
+        } catch (error) {
+          console.warn("[dsh-md-plus] PNG 导出失败", error);
+        } finally {
+          if (objectUrl !== "") URL.revokeObjectURL(objectUrl);
+        }
+      };
+      image.onerror = function () {
+        if (objectUrl !== "") URL.revokeObjectURL(objectUrl);
+        console.warn("[dsh-md-plus] PNG 导出失败：SVG 无法载入");
+      };
+      objectUrl = URL.createObjectURL(new Blob([serializeSvg(svg)], { type: "image/svg+xml;charset=utf-8" }));
+      image.src = objectUrl;
+    }
+
     /** 全屏查看：复制当前 SVG 到覆盖层，默认适应整图，适合很密的长时序图。 */
     function openFullscreen(block) {
       if (document.querySelector("." + MODAL_CLASS) !== null) return;
@@ -755,6 +966,12 @@ window.__ModuleLoader__.load({
       var fitButton = document.createElement("button");
       fitButton.type = "button";
       fitButton.textContent = "适应整图";
+      var svgButton = document.createElement("button");
+      svgButton.type = "button";
+      svgButton.textContent = "下载 SVG";
+      var pngButton = document.createElement("button");
+      pngButton.type = "button";
+      pngButton.textContent = "下载 PNG";
       var zoomOut = document.createElement("button");
       zoomOut.type = "button";
       zoomOut.textContent = "−";
@@ -767,6 +984,8 @@ window.__ModuleLoader__.load({
       closeButton.type = "button";
       closeButton.textContent = "关闭";
       actions.appendChild(fitButton);
+      actions.appendChild(svgButton);
+      actions.appendChild(pngButton);
       actions.appendChild(zoomOut);
       actions.appendChild(zoomIn);
       actions.appendChild(closeButton);
@@ -821,6 +1040,8 @@ window.__ModuleLoader__.load({
         if (event.target === overlay) closeViewer();
       });
       fitButton.addEventListener("click", reset);
+      svgButton.addEventListener("click", () => downloadSvg(svg));
+      pngButton.addEventListener("click", () => downloadPng(svg));
       zoomOut.addEventListener("click", () => zoomBy(overlay, 1 / ZOOM_STEP));
       zoomIn.addEventListener("click", () => zoomBy(overlay, ZOOM_STEP));
       closeButton.addEventListener("click", closeViewer);
@@ -867,6 +1088,7 @@ window.__ModuleLoader__.load({
           observer.disconnect();
           for (const node of injected) node.remove();
           injected.clear();
+          for (const node of document.querySelectorAll("." + FOLD_CLASS)) resetFold(node);
           for (const node of document.querySelectorAll(
             "." + MMD_CLASS + ", ." + MMD_CLASS + "-error, ." + MODAL_CLASS,
           )) {
