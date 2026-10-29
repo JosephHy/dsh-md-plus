@@ -899,6 +899,26 @@ test("设置面板保存字号、折叠阈值、配色和默认视图", async ()
   const modal = document.querySelector(".md-plus-settings-modal");
   assert.ok(modal, "点设置要打开面板");
 
+  const foldHints = [...modal.querySelectorAll(".md-plus-settings-modal-label-hint")];
+  assert.deepEqual(
+    foldHints.map((hint) => hint.textContent),
+    ["内容高度超过此值后折叠", "表格高度超过此值后折叠", "图形高度超过此值后折叠"],
+    "三个折叠阈值都要说明按高度判断",
+  );
+  const css = stylesheet();
+  assert.ok(
+    css.includes(
+      ".md-plus-settings-modal-actions .md-plus-settings-modal-primary:hover{background:var(--dsw-alias-button-primary-hover",
+    ),
+    "保存按钮悬浮时要保留主按钮背景，不能被通用按钮 hover 盖成透明",
+  );
+  assert.ok(
+    css.includes(
+      ".md-plus-settings-modal-actions .md-plus-settings-modal-primary{background:var(--dsw-alias-button-primary-fill",
+    ),
+    "保存按钮要用主按钮前景色",
+  );
+
   const [font, foldCode, foldTable, foldDiagram] = modal.querySelectorAll("input");
   font.value = "15";
   foldCode.value = "600";

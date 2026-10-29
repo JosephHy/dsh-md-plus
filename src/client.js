@@ -98,6 +98,9 @@ window.__ModuleLoader__.load({
         settingsFoldCode: "代码块",
         settingsFoldTable: "表格",
         settingsFoldDiagram: "图表",
+        settingsFoldCodeHint: "内容高度超过此值后折叠",
+        settingsFoldTableHint: "表格高度超过此值后折叠",
+        settingsFoldDiagramHint: "图形高度超过此值后折叠",
         settingsFoldHint: "单位 px，0 表示不折叠",
         settingsSave: "保存",
         settingsReset: "恢复默认",
@@ -146,6 +149,9 @@ window.__ModuleLoader__.load({
         settingsFoldCode: "Code block",
         settingsFoldTable: "Table",
         settingsFoldDiagram: "Diagram",
+        settingsFoldCodeHint: "Fold when the block is taller than this",
+        settingsFoldTableHint: "Fold when the table is taller than this",
+        settingsFoldDiagramHint: "Fold when the diagram is taller than this",
         settingsFoldHint: "Pixels; 0 disables folding",
         settingsSave: "Save",
         settingsReset: "Reset to defaults",
@@ -412,14 +418,17 @@ window.__ModuleLoader__.load({
       "." + SETTINGS_MODAL_CLASS + "-panel{width:min(440px,100%);max-height:86vh;overflow:auto;padding:16px 18px 14px;border:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 18%));border-radius:12px;background:var(--dsw-alias-bg-base,#fff);box-shadow:0 24px 80px rgb(0 0 0 / 25%)}",
       "." + SETTINGS_MODAL_CLASS + "-title{margin:0 0 6px;font:600 14px/22px var(--dsw-font-family-sans,system-ui,sans-serif);color:var(--dsw-alias-label-primary)}",
       "." + SETTINGS_MODAL_CLASS + "-row{display:flex;align-items:center;gap:12px;margin:11px 0}",
-      "." + SETTINGS_MODAL_CLASS + "-label{flex:1;min-width:0;font:13px/20px var(--dsw-font-family-sans,system-ui,sans-serif);color:var(--dsw-alias-label-primary)}",
+      "." + SETTINGS_MODAL_CLASS + "-label{display:flex;flex-direction:column;gap:1px;flex:1;min-width:0;font:13px/20px var(--dsw-font-family-sans,system-ui,sans-serif);color:var(--dsw-alias-label-primary)}",
+      "." + SETTINGS_MODAL_CLASS + "-label-title{display:block}",
+      "." + SETTINGS_MODAL_CLASS + "-label-hint{display:block;font:11px/16px var(--dsw-font-family-sans,system-ui,sans-serif);color:var(--dsw-alias-label-tertiary)}",
       "." + SETTINGS_MODAL_CLASS + "-hint{margin:-4px 0 8px;font:11px/16px var(--dsw-font-family-sans,system-ui,sans-serif);color:var(--dsw-alias-label-tertiary)}",
       "." + SETTINGS_MODAL_CLASS + " input[type=number]{width:78px;padding:4px 6px;border:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 22%));border-radius:6px;background:var(--dsw-alias-bg-layer-2,rgb(127 127 127 / 6%));color:var(--dsw-alias-label-primary);font:13px/18px var(--dsw-font-family-sans,system-ui,sans-serif)}",
       "." + SETTINGS_MODAL_CLASS + " select{padding:4px 6px;border:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 22%));border-radius:6px;background:var(--dsw-alias-bg-layer-2,rgb(127 127 127 / 6%));color:var(--dsw-alias-label-primary);font:13px/18px var(--dsw-font-family-sans,system-ui,sans-serif)}",
       "." + SETTINGS_MODAL_CLASS + "-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}",
       "." + SETTINGS_MODAL_CLASS + "-actions button{appearance:none;border:0;border-radius:6px;padding:5px 12px;background:var(--dsw-alias-interactive-bg-hover,rgb(127 127 127 / 12%));color:var(--dsw-alias-label-primary);font:12px/18px var(--dsw-font-family-sans,system-ui,sans-serif);cursor:pointer}",
-      "." + SETTINGS_MODAL_CLASS + "-actions button:hover{background:var(--dsw-alias-interactive-bg-active,rgb(76 110 245 / 12%))}",
-      "." + SETTINGS_MODAL_CLASS + "-actions ." + SETTINGS_MODAL_CLASS + "-primary{background:var(--dsw-alias-button-primary-fill,#4c6ef5);color:#fff}",
+      "." + SETTINGS_MODAL_CLASS + "-actions button:not(." + SETTINGS_MODAL_CLASS + "-primary):hover{background:var(--dsw-alias-interactive-bg-active,rgb(76 110 245 / 12%))}",
+      "." + SETTINGS_MODAL_CLASS + "-actions ." + SETTINGS_MODAL_CLASS + "-primary{background:var(--dsw-alias-button-primary-fill,#4c6ef5);color:var(--dsw-alias-label-primary-foreground,#fff)}",
+      "." + SETTINGS_MODAL_CLASS + "-actions ." + SETTINGS_MODAL_CLASS + "-primary:hover{background:var(--dsw-alias-button-primary-hover,var(--dsw-alias-button-primary-fill,#4c6ef5))}",
 
       // 高亮宿主不参与布局，让里面的 <pre> 直接吃到卡片样式
       "." + HOST_CLASS + "{display:contents}",
@@ -1248,12 +1257,21 @@ window.__ModuleLoader__.load({
     }
 
     // ── 设置面板 ─────────────────────────────────────────────────────
-    function settingRow(labelText, control) {
+    function settingRow(labelText, control, hintText) {
       var row = document.createElement("div");
       row.className = SETTINGS_MODAL_CLASS + "-row";
       var label = document.createElement("span");
       label.className = SETTINGS_MODAL_CLASS + "-label";
-      label.textContent = labelText;
+      var title = document.createElement("span");
+      title.className = SETTINGS_MODAL_CLASS + "-label-title";
+      title.textContent = labelText;
+      label.appendChild(title);
+      if (hintText !== undefined) {
+        var hint = document.createElement("span");
+        hint.className = SETTINGS_MODAL_CLASS + "-label-hint";
+        hint.textContent = hintText;
+        label.appendChild(hint);
+      }
       row.appendChild(label);
       row.appendChild(control);
       return row;
@@ -1331,9 +1349,9 @@ window.__ModuleLoader__.load({
       var foldCode = numberInput(current.foldCode, 0, 4000);
       var foldTable = numberInput(current.foldTable, 0, 4000);
       var foldDiagram = numberInput(current.foldDiagram, 0, 4000);
-      panel.appendChild(settingRow(t("settingsFoldCode"), foldCode));
-      panel.appendChild(settingRow(t("settingsFoldTable"), foldTable));
-      panel.appendChild(settingRow(t("settingsFoldDiagram"), foldDiagram));
+      panel.appendChild(settingRow(t("settingsFoldCode"), foldCode, t("settingsFoldCodeHint")));
+      panel.appendChild(settingRow(t("settingsFoldTable"), foldTable, t("settingsFoldTableHint")));
+      panel.appendChild(settingRow(t("settingsFoldDiagram"), foldDiagram, t("settingsFoldDiagramHint")));
 
       var actions = document.createElement("div");
       actions.className = SETTINGS_MODAL_CLASS + "-actions";
