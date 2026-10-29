@@ -70,6 +70,7 @@ let hlRuntime;
 before(async () => {
   window = new Window({ url: "http://127.0.0.1:43120/" });
   document = window.document;
+  document.documentElement.lang = "zh-CN";
   globalThis.window = window;
   globalThis.document = document;
   globalThis.MutationObserver = window.MutationObserver;
@@ -708,7 +709,7 @@ test("样式表针对所有代码块，不只是补高亮的那些", async () =>
 
   assert.match(css, /\.md-code-block \[data-code-block-banner\]\{padding:8px 16px 0/, "头部自身不留下方内边距");
   assert.match(css, /:empty::after\{content:'Plain text'\}/, "没语言要有占位名，否则左边一片空白");
-  assert.match(css, /\.md-code-block pre\{padding:6px 16px 16px\}/, "首行代码上方补 6px，别贴着头部");
+  assert.match(css, /\.md-code-block pre\{padding:6px 16px 16px;font-size:var\(--md-plus-code-font-size,inherit\)\}/, "首行代码上方补 6px，别贴着头部");
   assert.match(css, /\{background:transparent\}/, "要去掉 bannerWrap 的白色色带");
   assert.match(css, /md-plus-icon-copy/, "复制按钮要换成图标");
 });
@@ -780,5 +781,152 @@ test("卸载时连按钮一起摘掉", async () => {
 
   effects[0]();
   assert.equal(document.querySelectorAll(".md-plus-tool").length, 0, "卸载要摘掉注入的按钮");
+});
+
+// ── 表格增强、图片放大、设置面板与国际化 ─────────────────────────────
+
+function tableHtml() {
+  return (
+    '<div class="_markdown_x"><div id="copy-table"><table>' +
+    "<thead><tr><th>名称</th><th>数量</th></tr></thead>" +
+    "<tbody><tr><td>苹果</td><td>2</td></tr><tr><td>香蕉, 大</td><td>3</td></tr></tbody>" +
+    "</table></div></div>"
+  );
+}
+
+function stubClipboard() {
+  const copied = [];
+  Object.defineProperty(window.navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: async (text) => copied.push(text) },
+  });
+  return copied;
+}
+
+test("表格表头吸顶", async () => {
+  mount();
+  await settle();
+  const css = stylesheet();
+  assert.match(
+    css,
+    /div:has\(> table\) > table thead th\{position:sticky;top:0;z-index:1\}/,
+    "表头要 sticky 在滚动容器顶部",
+  );
+  assert.doesNotMatch(
+    css,
+    /div:has\(> table\) > table\{[^}]*overflow:hidden/,
+    "表格自身不能 overflow:hidden，否则 sticky 没有可用的滚动祖先",
+  );
+});
+
+test("表格复制 CSV / Markdown", async () => {
+  mount();
+  const copied = stubClipboard();
+  document.body.innerHTML = tableHtml();
+  await settle();
+
+  const tools = document.querySelector("#copy-table > table > .md-plus-table-tools");
+  assert.ok(tools, "表格要挂出复制按钮");
+  const buttons = [...tools.querySelectorAll("button")];
+  assert.deepEqual(buttons.map((b) => b.textContent), ["CSV", "Markdown"]);
+
+  buttons[0].dispatchEvent(new window.Event("click"));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(copied.at(-1), "名称,数量\n苹果,2\n\"香蕉, 大\",3");
+
+  buttons[1].dispatchEvent(new window.Event("click"));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(
+    copied.at(-1),
+    "| 名称 | 数量 |\n| --- | --- |\n| 苹果 | 2 |\n| 香蕉, 大 | 3 |",
+  );
+});
+
+test("点开 Markdown 图片放大，Esc 关闭", async () => {
+  mount();
+  document.body.innerHTML =
+    '<div class="_markdown_x"><p><img src="http://127.0.0.1:43120/pic.png" alt="截图"></p></div>';
+  await settle();
+
+  document.querySelector("img").dispatchEvent(new window.Event("click", { bubbles: true }));
+  const modal = document.querySelector(".md-plus-img-modal");
+  assert.ok(modal, "点图片要打开放大层");
+  assert.match(modal.querySelector("img").src, /pic\.png$/);
+  assert.equal(modal.querySelector("img").alt, "截图");
+
+  document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  assert.equal(tagOf(document.querySelector(".md-plus-img-modal")), "null", "Esc 要关闭图片层");
+});
+
+test("宿主原生图片预览按钮里的图片不重复接管", async () => {
+  mount();
+  document.body.innerHTML =
+    '<div class="_markdown_x"><p><button type="button" class="_imageButton_x">' +
+    '<img src="http://127.0.0.1:43120/native.png" alt="原生预览"></button></p></div>';
+  await settle();
+
+  document.querySelector("img").dispatchEvent(new window.Event("click", { bubbles: true }));
+  assert.equal(
+    tagOf(document.querySelector(".md-plus-img-modal")),
+    "null",
+    "图片已经在宿主的 imageButton 里时，插件不能再开自己的预览层",
+  );
+});
+
+test("链接里的图片不抢点击", async () => {
+  mount();
+  document.body.innerHTML =
+    '<div class="_markdown_x"><p><a href="http://127.0.0.1:43120/target">' +
+    '<img src="http://127.0.0.1:43120/linked.png" alt="链接图片"></a></p></div>';
+  await settle();
+
+  document.querySelector("img").dispatchEvent(new window.Event("click", { bubbles: true, cancelable: true }));
+  assert.equal(
+    tagOf(document.querySelector(".md-plus-img-modal")),
+    "null",
+    "链接图片的点击应该留给链接本身",
+  );
+});
+
+test("设置面板保存字号、折叠阈值、配色和默认视图", async () => {
+  mount();
+  document.body.innerHTML = codeBlockHtml("dart", "int a = 1;");
+  await settle();
+
+  const gear = document.querySelector(".md-plus-settings-btn");
+  assert.ok(gear, "要有一个设置入口");
+  gear.dispatchEvent(new window.Event("click"));
+  const modal = document.querySelector(".md-plus-settings-modal");
+  assert.ok(modal, "点设置要打开面板");
+
+  const [font, foldCode, foldTable, foldDiagram] = modal.querySelectorAll("input");
+  font.value = "15";
+  foldCode.value = "600";
+  foldTable.value = "700";
+  foldDiagram.value = "800";
+  modal.querySelector("select").value = "forest";
+  modal.querySelectorAll("select")[1].value = "code";
+  modal.querySelector(".md-plus-settings-modal-primary").dispatchEvent(new window.Event("click"));
+
+  assert.equal(
+    window.localStorage.getItem("dsh-md-plus-settings"),
+    JSON.stringify({ codeFontSize: 15, diagramView: "code", foldCode: 600, foldTable: 700, foldDiagram: 800 }),
+  );
+  assert.equal(window.localStorage.getItem("dsh-md-plus-mermaid-theme"), "forest");
+  assert.equal(document.documentElement.style.getPropertyValue("--md-plus-code-font-size"), "15px");
+  assert.equal(tagOf(document.querySelector(".md-plus-settings-modal")), "null", "保存后要关闭面板");
+});
+
+test("英文界面下按钮文案切换", async () => {
+  document.documentElement.lang = "en-US";
+  try {
+    mount();
+    document.body.innerHTML = codeBlockHtml("dart", "int a = 1;");
+    await settle();
+    const block = document.querySelector(".md-code-block");
+    assert.equal(block.querySelector(".md-plus-tool").title, "No wrap (horizontal scroll)");
+  } finally {
+    document.documentElement.lang = "zh-CN";
+  }
 });
 

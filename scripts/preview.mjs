@@ -165,13 +165,37 @@ const highlighter = await createHighlighterCore({
 });
 const jsonHtml = highlighter.codeToHtml(JSON_CODE, { lang: "json", theme });
 
+// 表格：内容用本插件自己的改前 / 改后对照
+const TABLE_HEAD = ["元素", "改前（DSH 原生）", "改后（dsh-md-plus）"];
+const TABLE_ROWS = [
+  ["头部左侧", "无语言时整片空白", "</> 图标 + 语言名"],
+  ["头部右侧", "文字「复制」", "图标：不换行 + 复制"],
+  ["顶栏背景", "纯白，与卡片拉开一条带", "与卡片同色，整块一张卡片"],
+  ["间距", "卡顶 13px / 头部→代码 34px", "卡顶 15px / 头部→代码 17px"],
+  ["覆盖范围", "只有 DSH 内置的那 26 种", "所有语言统一外观"],
+];
+
+const tableHtml =
+  `<div class="${MD.get("tableScroll")} md-table-wide"><table>` +
+  "<thead><tr>" +
+  TABLE_HEAD.map((cell) => `<th>${cell}</th>`).join("") +
+  "</tr></thead><tbody>" +
+  TABLE_ROWS.map(
+    (row) => "<tr>" + row.map((cell) => `<td>${cell}</td>`).join("") + "</tr>",
+  ).join("") +
+  "</tbody></table></div>";
+
 document.body.innerHTML =
+  `<div class="${MD.get("markdown")}">` +
   caption("JSON：DSH 自己高亮的语言，照样吃同一套卡片外观") +
   block("JSON", "", `<div>${jsonHtml}</div>`) +
   caption("dart：DSH 不认的语言。本页的颜色是插件用 Shiki 直接上色的样子；0.2.0-rc.2 上头部语言名被占位「代码块」顶掉，这条补高亮暂时失效（见 README 已知边界）") +
   block("代码块", DART_CODE) +
   caption("没有写语言：头部照样有图标和文字，不再是一整片空白") +
-  block("代码块", TREE_CODE);
+  block("代码块", TREE_CODE) +
+  caption("表格：灰底表头、只有横线、外框收圆角，表头吸顶，表格上方可复制为 CSV / Markdown") +
+  tableHtml +
+  "</div>";
 
 plugin.apply({ effect: (fn) => fn() });
 await new Promise((resolve) => setTimeout(resolve, DEBOUNCE_MS + 400));
@@ -282,29 +306,10 @@ function mermaidCard({ id }, svg) {
   );
 }
 
-// ── 4. 表格：内容用本插件自己的改前 / 改后对照 ───────────────────────
-const TABLE_HEAD = ["元素", "改前（DSH 原生）", "改后（dsh-md-plus）"];
-const TABLE_ROWS = [
-  ["头部左侧", "无语言时整片空白", "</> 图标 + 语言名"],
-  ["头部右侧", "文字「复制」", "图标：不换行 + 复制"],
-  ["顶栏背景", "纯白，与卡片拉开一条带", "与卡片同色，整块一张卡片"],
-  ["间距", "卡顶 13px / 头部→代码 34px", "卡顶 15px / 头部→代码 17px"],
-  ["覆盖范围", "只有 DSH 内置的那 26 种", "所有语言统一外观"],
-];
-
-const tableHtml =
-  `<div class="${MD.get("tableScroll")} md-table-wide"><table>` +
-  "<thead><tr>" +
-  TABLE_HEAD.map((cell) => `<th>${cell}</th>`).join("") +
-  "</tr></thead><tbody>" +
-  TABLE_ROWS.map(
-    (row) => "<tr>" + row.map((cell) => `<td>${cell}</td>`).join("") + "</tr>",
-  ).join("") +
-  "</tbody></table></div>";
-
 writeFileSync(
   join(ROOT, "preview.html"),
   `<!doctype html>
+<html lang="zh-CN">
 <meta charset="utf-8">
 <title>dsh-md-plus preview</title>
 <style>
@@ -325,13 +330,9 @@ ${pluginCss}
 </style>
 <div class="wrap">
 <h2>dsh-md-plus 显示效果预览</h2>
-<p class="sub">代码块卡片 · 补语法高亮 · mermaid 图形 · 表格样式</p>
-<div class="${MD.get("markdown")}">
+<p class="sub">代码块卡片 · 补语法高亮 · mermaid 图形 · 表格样式与复制</p>
 ${codeBlocksHtml}
-${caption("表格：灰底表头、只有横线、外框收圆角，首末列各留 16px 内边距")}
-${tableHtml}
 ${caption("mermaid：插件自己渲染的图形。头部语言名同样是占位「代码块」，所以图是靠正文里的类型声明认出来的（flowchart / graph 都行）；上面这张横排长链在 100% 下只有几十像素高（所以才有最低高度和滚轮缩放），下面这张是分叉图")}
-</div>
 ${MMD_CARDS.map((card, index) => mermaidCard(card, svgs[index])).join("\n")}
 </div>
 `,

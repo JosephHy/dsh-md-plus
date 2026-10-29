@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dsh-md-plus 能力总览</title>
+<style>
+  :root{--ink:#15171c;--muted:#69707d;--line:#e5e8ef;--accent:#4c6ef5}
+  *{box-sizing:border-box}
+  body{margin:0;background:#f5f6f8;color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 24px 80px}
+  header.hero{padding:36px 38px;border-radius:20px;background:radial-gradient(120% 160% at 100% 0%,#dfe7ff 0%,#f7f8fb 54%,#fff 100%);border:1px solid #e4e8f1;margin-bottom:26px}
+  .eyebrow{font:600 11px/1.4 ui-monospace,monospace;letter-spacing:.14em;color:#5b6ee1}
+  h1{margin:9px 0 10px;font-size:34px;letter-spacing:-.02em}
+  .hero p{margin:0;max-width:720px;color:#5d6471;font-size:14px;line-height:1.8}
+  .tags{display:flex;flex-wrap:wrap;gap:7px;margin-top:16px}
+  .tags span{padding:5px 10px;border-radius:999px;background:#fff;border:1px solid #e4e7ee;font-size:12px;color:#4c5360}
+  .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:24px 26px 26px;margin-bottom:20px}
+  .card h2{margin:0 0 4px;font-size:18px}
+  .card .desc{margin:0 0 16px;color:var(--muted);font-size:13px;line-height:1.7}
+  .shot{display:block;width:100%;border:1px solid var(--line);border-radius:12px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media (max-width:820px){.grid{grid-template-columns:1fr}}
+  .features{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
+  .features th,.features td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left}
+  .features th{background:#f7f8fa;color:#303540;font-weight:600}
+  .features tr:last-child td{border-bottom:0}
+  code{padding:1px 5px;border-radius:4px;background:#f1f2f5;font-size:12px}
+  .note{color:#8a909c;font-size:12px;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div class="eyebrow">DSH PLUGIN · CAPABILITY SHOWCASE</div>
+    <h1>dsh-md-plus 能力总览</h1>
+    <p>DeepSeek Harness Web / Desktop 的 Markdown 阅读增强插件。下面是插件在模拟 DSH 聊天区上真实运行后的截图，覆盖代码块、语法高亮、Mermaid、表格、图片、折叠和设置面板。</p>
+    <div class="tags"><span>代码块卡片</span><span>Shiki 补高亮</span><span>Mermaid 全屏 / 导出</span><span>表格 CSV / Markdown</span><span>图片预览</span><span>长内容折叠</span><span>设置面板</span></div>
+  </header>
+
+  <section class="card">
+    <h2>能力清单</h2>
+    <p class="desc">插件只改 Markdown 的显示层，不改变解析结果。</p>
+    <table class="features">
+      <thead><tr><th>能力</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>代码块卡片</td><td>统一卡片外观，头部显示 <code>&lt;/&gt;</code> 图标与语言名；无语言显示「纯文本」；按钮收成图标。</td></tr>
+        <tr><td>语法高亮</td><td>DSH 自带语言继续由宿主上色；DSH 不认识的语言由插件用 Shiki 补高亮。</td></tr>
+        <tr><td>Mermaid</td><td>围栏渲染成 SVG，支持图形 / 代码切换、缩放、拖拽、双击适应、全屏、四套配色和 SVG / PNG 导出。</td></tr>
+        <tr><td>表格</td><td>灰底表头、横向分隔线、外圈圆角、悬停高亮；表头吸顶；每张表可复制为 CSV 或 Markdown。</td></tr>
+        <tr><td>图片放大</td><td>旧宿主没有原生预览按钮时兜底：点击打开暗色预览，Esc 或点遮罩关闭；新版 DSH 原生预览、头像、图标、代码块和链接图片不接管。</td></tr>
+        <tr><td>长内容折叠</td><td>代码块、表格、Mermaid 图卡超过阈值自动折叠，底部出现「展开 / 收起」。</td></tr>
+        <tr><td>设置面板</td><td>右下角齿轮调整 Mermaid 配色、代码字号、图表默认视图和三类折叠阈值，设置存 localStorage。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>代码块：统一卡片 + 补语法高亮</h2>
+    <p class="desc">JSON 是 DSH 自己高亮的语言；GDScript 是 DSH 不认、由插件补色的语言。头部按钮统一收成图标，无语言时显示「纯文本」。</p>
+    <img class="shot" src="01-code.png" alt="代码块卡片与语法高亮">
+  </section>
+
+  <section class="card">
+    <h2>长内容折叠</h2>
+    <p class="desc">42 行 JavaScript 超过默认 480px 阈值后自动折叠，底部出现「展开」按钮，长日志不再撑满聊天。</p>
+    <img class="shot" src="02-code-fold.png" alt="长代码折叠">
+  </section>
+
+  <section class="card">
+    <h2>Mermaid：图形与全屏</h2>
+    <p class="desc">围栏内容渲染成 SVG；头部提供缩放、图形 / 代码切换、全屏和配色按钮。全屏工具栏支持适应整图、缩放和下载 SVG / PNG。</p>
+    <div class="grid">
+      <img class="shot" src="03-mermaid.png" alt="Mermaid 图形卡片">
+      <img class="shot" src="04-mermaid-fullscreen.png" alt="Mermaid 全屏查看">
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Mermaid 四套配色</h2>
+    <p class="desc">头部调色按钮循环切换蓝色、中性、森林和高对比，已渲染的图会即时重画，选择记在本地。</p>
+    <img class="shot" src="theme-comparison.png" alt="Mermaid 四套配色对比">
+  </section>
+
+  <section class="card">
+    <h2>表格：样式、复制与折叠</h2>
+    <p class="desc">表头灰底、只有横线、外圈圆角；表头吸顶；右上角「CSV / Markdown」一键复制，长表超过阈值自动折叠。</p>
+    <img class="shot" src="05-table.png" alt="表格样式与复制按钮">
+  </section>
+
+  <section class="card">
+    <h2>设置面板</h2>
+    <p class="desc">右下角齿轮打开设置：Mermaid 配色、代码字号、图表默认视图、代码块 / 表格 / 图表的折叠阈值；保存后写入 localStorage，刷新保持。</p>
+    <img class="shot" src="06-settings.png" alt="设置面板">
+  </section>
+
+  <section class="card">
+    <h2>图片点击放大</h2>
+    <p class="desc">旧宿主没有原生预览按钮时由插件兜底：点击打开暗色预览，Esc 或点遮罩关闭；新版 DSH 原生预览、头像、图标、代码块和链接图片都不接管。</p>
+    <img class="shot" src="07-image.png" alt="图片放大预览">
+  </section>
+
+  <p class="note">截图由 <code>scripts/showcase.mjs</code> 生成的演示页在 Chrome 中真实运行插件后截取；示例内容为中性模板。</p>
+</div>
+</body>
+</html>

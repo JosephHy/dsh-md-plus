@@ -42,7 +42,120 @@ window.__ModuleLoader__.load({
     var THEME_CLASS = "md-plus-theme";
     var THEME_KEY = "dsh-md-plus-mermaid-theme";
     var THEME_ORDER = ["blue", "neutral", "forest", "contrast"];
-    var THEME_LABELS = { blue: "蓝色", neutral: "中性", forest: "森林", contrast: "高对比" };
+    var THEME_LABELS = {
+      zh: { blue: "蓝色", neutral: "中性", forest: "森林", contrast: "高对比" },
+      en: { blue: "Blue", neutral: "Neutral", forest: "Forest", contrast: "High contrast" },
+    };
+    /** 页面语言优先；DSH 桌面端通常把 lang 放在 <html> 上，取不到再看浏览器语言。 */
+    function detectLang() {
+      var declared = (document.documentElement.lang || "").toLowerCase();
+      if (declared.startsWith("zh")) return "zh";
+      if (declared.startsWith("en")) return "en";
+      var nav = (window.navigator.language || "").toLowerCase();
+      return nav.startsWith("zh") ? "zh" : "en";
+    }
+    var TEXT = {
+      zh: {
+        wrapTitle: "不换行（横向滚动）",
+        wrapAria: "切换代码换行",
+        zoomOut: "缩小",
+        zoomOutAria: "缩小流程图",
+        zoomIn: "放大",
+        zoomInAria: "放大流程图",
+        toggle: "切换图形 / 代码",
+        toggleAria: "切换图形与代码",
+        fullscreen: "全屏查看",
+        fullscreenAria: "全屏查看流程图",
+        theme: "切换 Mermaid 配色",
+        themeAria: "切换 Mermaid 配色",
+        themePrefix: "配色：",
+        foldOpen: "展开",
+        foldClose: "收起",
+        renderFailed: "mermaid 渲染失败：",
+        diagram: "流程图",
+        diagramAria: "流程图全屏查看",
+        fit: "适应整图",
+        downloadSvg: "下载 SVG",
+        downloadPng: "下载 PNG",
+        close: "关闭",
+        tableCsv: "CSV",
+        tableMd: "Markdown",
+        copyCsvTitle: "复制表格为 CSV",
+        copyMdTitle: "复制表格为 Markdown",
+        copied: "已复制",
+        copyFailed: "复制失败",
+        imageViewer: "图片预览",
+        imageClose: "关闭图片预览",
+        settingsOpen: "打开 Markdown+ 设置",
+        settingsTitle: "Markdown+ 设置",
+        settingsTheme: "Mermaid 配色",
+        settingsFontSize: "代码字号",
+        settingsFontSizeHint: "留空或 0 表示跟随宿主",
+        settingsView: "图表默认视图",
+        settingsViewDiagram: "图形",
+        settingsViewCode: "代码",
+        settingsFold: "长内容折叠阈值",
+        settingsFoldCode: "代码块",
+        settingsFoldTable: "表格",
+        settingsFoldDiagram: "图表",
+        settingsFoldHint: "单位 px，0 表示不折叠",
+        settingsSave: "保存",
+        settingsReset: "恢复默认",
+        settingsClose: "关闭",
+      },
+      en: {
+        wrapTitle: "No wrap (horizontal scroll)",
+        wrapAria: "Toggle code wrapping",
+        zoomOut: "Zoom out",
+        zoomOutAria: "Zoom out diagram",
+        zoomIn: "Zoom in",
+        zoomInAria: "Zoom in diagram",
+        toggle: "Switch diagram / code",
+        toggleAria: "Switch diagram and code",
+        fullscreen: "Fullscreen",
+        fullscreenAria: "View diagram fullscreen",
+        theme: "Change Mermaid theme",
+        themeAria: "Change Mermaid theme",
+        themePrefix: "Theme: ",
+        foldOpen: "Expand",
+        foldClose: "Collapse",
+        renderFailed: "Mermaid render failed: ",
+        diagram: "Diagram",
+        diagramAria: "Diagram fullscreen viewer",
+        fit: "Fit",
+        downloadSvg: "Download SVG",
+        downloadPng: "Download PNG",
+        close: "Close",
+        tableCsv: "CSV",
+        tableMd: "Markdown",
+        copyCsvTitle: "Copy table as CSV",
+        copyMdTitle: "Copy table as Markdown",
+        copied: "Copied",
+        copyFailed: "Copy failed",
+        imageViewer: "Image preview",
+        imageClose: "Close image preview",
+        settingsOpen: "Open Markdown+ settings",
+        settingsTitle: "Markdown+ settings",
+        settingsTheme: "Mermaid theme",
+        settingsFontSize: "Code font size",
+        settingsFontSizeHint: "Leave empty or 0 to follow the host",
+        settingsView: "Default diagram view",
+        settingsViewDiagram: "Diagram",
+        settingsViewCode: "Code",
+        settingsFold: "Fold thresholds",
+        settingsFoldCode: "Code block",
+        settingsFoldTable: "Table",
+        settingsFoldDiagram: "Diagram",
+        settingsFoldHint: "Pixels; 0 disables folding",
+        settingsSave: "Save",
+        settingsReset: "Reset to defaults",
+        settingsClose: "Close",
+      },
+    };
+    function t(key) {
+      var lang = detectLang();
+      return TEXT[lang][key] ?? TEXT.en[key] ?? key;
+    }
     var MODAL_CLASS = "md-plus-mmd-modal";
     var DONE_ATTR = "data-md-plus";
     var KEY_ATTR = "data-md-plus-key";
@@ -52,9 +165,69 @@ window.__ModuleLoader__.load({
     var FOLD_CLASS = "md-plus-fold";
     var FOLD_BTN_CLASS = "md-plus-fold-toggle";
     var FOLD_LIMITS = { code: 480, table: 520, diagram: 720 };
+    var TABLE_TOOLS_CLASS = "md-plus-table-tools";
+    var TABLE_DONE_ATTR = "data-md-plus-table";
+    var IMG_MODAL_CLASS = "md-plus-img-modal";
+    // DSH 新版会把 Markdown 图片包进原生预览按钮，点击已经能打开 ImageLightbox。
+    var NATIVE_IMAGE_BUTTON = 'button[class*="imageButton"]';
+    var SETTINGS_BTN_CLASS = "md-plus-settings-btn";
+    var SETTINGS_MODAL_CLASS = "md-plus-settings-modal";
+    var SETTINGS_KEY = "dsh-md-plus-settings";
+    var DEFAULT_SETTINGS = {
+      codeFontSize: 0,
+      diagramView: "diagram",
+      foldCode: FOLD_LIMITS.code,
+      foldTable: FOLD_LIMITS.table,
+      foldDiagram: FOLD_LIMITS.diagram,
+    };
     var STYLE_ATTR = "data-md-plus-style";
     var RUNTIME_ATTR = "data-md-plus-runtime";
     var DEBOUNCE_MS = 160;
+
+    /** 读本地设置；坏值逐项回退，避免一个字段写坏拖垮全部功能。 */
+    function readSettings() {
+      var settings = { ...DEFAULT_SETTINGS };
+      try {
+        var raw = window.localStorage.getItem(SETTINGS_KEY);
+        var saved = raw === null ? null : JSON.parse(raw);
+        if (saved !== null && typeof saved === "object") {
+          var size = Number(saved.codeFontSize);
+          if (Number.isFinite(size) && size >= 10 && size <= 20) settings.codeFontSize = Math.round(size);
+          if (saved.diagramView === "code" || saved.diagramView === "diagram") {
+            settings.diagramView = saved.diagramView;
+          }
+          for (var key of ["foldCode", "foldTable", "foldDiagram"]) {
+            var value = Number(saved[key]);
+            if (Number.isFinite(value) && value >= 0) settings[key] = Math.min(4000, Math.round(value));
+          }
+        }
+      } catch {
+        /* 隐私模式或存了坏 JSON 时按默认值走 */
+      }
+      return settings;
+    }
+
+    function saveSettings(next) {
+      try {
+        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+      } catch {
+        /* 存不下就只影响本次会话 */
+      }
+    }
+
+    function foldLimit(kind) {
+      var settings = readSettings();
+      if (kind === "code") return settings.foldCode;
+      if (kind === "table") return settings.foldTable;
+      return settings.foldDiagram;
+    }
+
+    /** 代码字号是全局 CSS 变量；0 表示跟随宿主，不写任何东西。 */
+    function applyCodeFontSize() {
+      var size = readSettings().codeFontSize;
+      if (size > 0) document.documentElement.style.setProperty("--md-plus-code-font-size", size + "px");
+      else document.documentElement.style.removeProperty("--md-plus-code-font-size");
+    }
 
     // DSH 自带高亮的语言别名，对齐 dsh-client-ui-primitives/lib/index.js 里的 LANG_ALIASES。
     // 这些一律不碰：它的懒加载语法有「先出纯文本、后换高亮」的窗口，抢过来会撞成两份。
@@ -130,6 +303,10 @@ window.__ModuleLoader__.load({
     var ICON_THEME = icon(
       "<path d='M12 3s5 5.5 5 9a5 5 0 0 1-10 0c0-3.5 5-9 5-9z'/><path d='M9.5 12a2.5 2.5 0 0 0 5 0'/>",
     );
+    var ICON_GEAR = icon(
+      "<circle cx='12' cy='12' r='3'/>" +
+        "<path d='M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.14.36.48.6.87.61H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z'/>",
+    );
 
     // 表格抓手：结构选择器 + markdown 容器作用域，见 CSS 里的说明
     var TABLE = '[class*="_markdown_"] div:has(> table)';
@@ -155,11 +332,12 @@ window.__ModuleLoader__.load({
       ".md-code-block " + BANNER + " > :first-child::before{content:'';flex:none;width:14px;height:14px;background:currentColor;color:var(--dsw-alias-label-tertiary);-webkit-mask:var(--md-plus-icon) center/contain no-repeat;mask:var(--md-plus-icon) center/contain no-repeat}",
       // 没有语言时补个占位名，否则整行左边就是一片空白
       ".md-code-block " + BANNER + " > :first-child:empty::after{content:'Plain text'}",
+      ":lang(zh) .md-code-block " + BANNER + " > :first-child:empty::after{content:'纯文本'}",
 
       // ── 间距：头部与首行代码之间补 6px ──────────────────────────────
       // pre 的行高本身就在首行文字上方留了约半行空白；补 6px 后实测间距约 17px
       // （原来给 0 时只有 11px，贴着看太挤）
-      ".md-code-block pre{padding:6px 16px 16px}",
+      ".md-code-block pre{padding:6px 16px 16px;font-size:var(--md-plus-code-font-size,inherit)}",
 
       // ── 头部按钮：文字换成图标 ──────────────────────────────────────
       ".md-code-block " + BANNER + " button{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:0;border-radius:6px;font-size:0;cursor:pointer;background:transparent;color:var(--dsw-alias-label-tertiary);transition:background-color .12s ease,color .12s ease}",
@@ -218,6 +396,31 @@ window.__ModuleLoader__.load({
       "." + FOLD_BTN_CLASS + "{display:block;margin:8px auto 0;padding:4px 12px;border:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 22%));border-radius:999px;background:var(--dsw-alias-bg-base,#fff);color:var(--dsw-alias-label-primary);font:12px/18px var(--dsw-font-family-sans,system-ui,sans-serif);cursor:pointer;box-shadow:0 2px 8px rgb(0 0 0 / 12%);z-index:2}",
       "." + FOLD_CLASS + "[" + FOLD_ATTR + '="on"] .' + FOLD_BTN_CLASS + "{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);margin:0}",
 
+      // ── 图片点击放大 ────────────────────────────────────────────────
+      '[class*="_markdown_"] img{cursor:zoom-in}',
+      "." + IMG_MODAL_CLASS + "{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:calc(var(--dsh-windows-titlebar-height,0px) + 16px) 24px 24px;background:rgb(0 0 0 / 72%)}",
+      "." + IMG_MODAL_CLASS + " img{max-width:92vw;max-height:86vh;border-radius:8px;background:#fff;box-shadow:0 24px 80px rgb(0 0 0 / 35%)}",
+      "." + IMG_MODAL_CLASS + "-close{position:absolute;top:calc(var(--dsh-windows-titlebar-height,0px) + 18px);right:24px;width:32px;height:32px;padding:0;border:0;border-radius:999px;background:rgb(255 255 255 / 14%);color:#fff;font:20px/1 var(--dsw-font-family-sans,system-ui,sans-serif);cursor:pointer}",
+      "." + IMG_MODAL_CLASS + "-close:hover{background:rgb(255 255 255 / 24%)}",
+
+      // ── 设置面板 ────────────────────────────────────────────────────
+      ":root{--md-plus-icon-gear:" + ICON_GEAR + "}",
+      "." + SETTINGS_BTN_CLASS + "{position:fixed;right:16px;bottom:76px;z-index:2147482000;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 18%));border-radius:999px;background:var(--dsw-alias-bg-base,#fff);color:var(--dsw-alias-label-tertiary);opacity:.45;cursor:pointer;box-shadow:0 2px 10px rgb(0 0 0 / 12%);transition:opacity .12s ease,color .12s ease}",
+      "." + SETTINGS_BTN_CLASS + ":hover{opacity:1;color:var(--dsw-alias-label-primary)}",
+      "." + SETTINGS_BTN_CLASS + "::before{content:'';width:16px;height:16px;background:currentColor;-webkit-mask:var(--md-plus-icon-gear) center/contain no-repeat;mask:var(--md-plus-icon-gear) center/contain no-repeat}",
+      "." + SETTINGS_MODAL_CLASS + "{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:calc(var(--dsh-windows-titlebar-height,0px) + 16px) 24px 24px;background:rgb(0 0 0 / 48%)}",
+      "." + SETTINGS_MODAL_CLASS + "-panel{width:min(440px,100%);max-height:86vh;overflow:auto;padding:16px 18px 14px;border:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 18%));border-radius:12px;background:var(--dsw-alias-bg-base,#fff);box-shadow:0 24px 80px rgb(0 0 0 / 25%)}",
+      "." + SETTINGS_MODAL_CLASS + "-title{margin:0 0 6px;font:600 14px/22px var(--dsw-font-family-sans,system-ui,sans-serif);color:var(--dsw-alias-label-primary)}",
+      "." + SETTINGS_MODAL_CLASS + "-row{display:flex;align-items:center;gap:12px;margin:11px 0}",
+      "." + SETTINGS_MODAL_CLASS + "-label{flex:1;min-width:0;font:13px/20px var(--dsw-font-family-sans,system-ui,sans-serif);color:var(--dsw-alias-label-primary)}",
+      "." + SETTINGS_MODAL_CLASS + "-hint{margin:-4px 0 8px;font:11px/16px var(--dsw-font-family-sans,system-ui,sans-serif);color:var(--dsw-alias-label-tertiary)}",
+      "." + SETTINGS_MODAL_CLASS + " input[type=number]{width:78px;padding:4px 6px;border:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 22%));border-radius:6px;background:var(--dsw-alias-bg-layer-2,rgb(127 127 127 / 6%));color:var(--dsw-alias-label-primary);font:13px/18px var(--dsw-font-family-sans,system-ui,sans-serif)}",
+      "." + SETTINGS_MODAL_CLASS + " select{padding:4px 6px;border:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 22%));border-radius:6px;background:var(--dsw-alias-bg-layer-2,rgb(127 127 127 / 6%));color:var(--dsw-alias-label-primary);font:13px/18px var(--dsw-font-family-sans,system-ui,sans-serif)}",
+      "." + SETTINGS_MODAL_CLASS + "-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}",
+      "." + SETTINGS_MODAL_CLASS + "-actions button{appearance:none;border:0;border-radius:6px;padding:5px 12px;background:var(--dsw-alias-interactive-bg-hover,rgb(127 127 127 / 12%));color:var(--dsw-alias-label-primary);font:12px/18px var(--dsw-font-family-sans,system-ui,sans-serif);cursor:pointer}",
+      "." + SETTINGS_MODAL_CLASS + "-actions button:hover{background:var(--dsw-alias-interactive-bg-active,rgb(76 110 245 / 12%))}",
+      "." + SETTINGS_MODAL_CLASS + "-actions ." + SETTINGS_MODAL_CLASS + "-primary{background:var(--dsw-alias-button-primary-fill,#4c6ef5);color:#fff}",
+
       // 高亮宿主不参与布局，让里面的 <pre> 直接吃到卡片样式
       "." + HOST_CLASS + "{display:contents}",
       // 藏掉纯文本回退，只留着色结果；原节点仍在，复制读的还是它
@@ -227,12 +430,12 @@ window.__ModuleLoader__.load({
       // 抓手用结构选择器而不是 DSH 的哈希类名：外层是「唯一子元素是 table 的 div」。
       // 前面挂 [class*="_markdown_"] 有两个作用——只认 markdown 渲染出来的表格，
       // 同时把特异性顶到 (0,1,4)，压过 DSH 自己的 .tableScroll th (0,1,1)。
-      TABLE + "{margin-block:16px;" + TABLE_VARS + "}",
+      TABLE + "{position:relative;margin-block:16px;" + TABLE_VARS + "}",
       "body[data-ds-dark-theme] " + TABLE + "{" + TABLE_VARS_DARK + "}",
       // 整张表一个 1px 边框 + 小圆角。
       // 注意必须是 separate：collapse 模式下 Chrome 会忽略单元格的圆角，
       // 表头的灰底会在四角戳出直角。border-spacing 归零所以不会有缝。
-      TABLE + " > table{border:1px solid var(--md-plus-tbl-line);border-collapse:separate;border-spacing:0;border-radius:var(--md-plus-tbl-radius);overflow:hidden}",
+      TABLE + " > table{border:1px solid var(--md-plus-tbl-line);border-collapse:separate;border-spacing:0;border-radius:var(--md-plus-tbl-radius)}",
       // 表头：浅灰底 + 加粗深色字（DSH 原本没有底色）
       TABLE + " > table th{background:var(--md-plus-tbl-head);color:var(--md-plus-tbl-head-fg);font-weight:600;padding:10px 16px;border-bottom:1px solid var(--md-plus-tbl-line);border-top:0}",
       TABLE + " > table td{padding:10px 16px;border-bottom:1px solid var(--md-plus-tbl-line)}",
@@ -251,6 +454,12 @@ window.__ModuleLoader__.load({
       TABLE + " > table tr:last-child td{border-bottom:0}",
       // 宽表横向扫读时给个落点
       TABLE + " > table tbody tr:hover td{background:var(--md-plus-tbl-hover)}",
+      // 长表往下滚时表头留在视口顶部；底色不透明才不会透出下面的行
+      TABLE + " > table thead th{position:sticky;top:0;z-index:1}",
+      // 复制按钮放在表尾右侧：不压住表头文字，表格折叠时也能随展开一起出现
+      TABLE + " > table > caption." + TABLE_TOOLS_CLASS + "{caption-side:top;text-align:right;padding:0 0 6px}",
+      TABLE + " > table > caption." + TABLE_TOOLS_CLASS + " button{appearance:none;border:1px solid var(--md-plus-tbl-line);border-radius:5px;padding:2px 8px;margin-left:4px;background:transparent;color:var(--dsw-alias-label-secondary);font:11px/16px var(--dsw-font-family-sans,system-ui,sans-serif);cursor:pointer}",
+      TABLE + " > table > caption." + TABLE_TOOLS_CLASS + " button:hover{color:var(--dsw-alias-label-primary);background:var(--md-plus-tbl-hover)}",
 
       // 宽表（≥4 列）不收着不行。宿主给这类表加了 .md-table-wide，并让它「出血」：
       // 包裹层撑到面板宽，再用 padding-left 把表推到正文栏左侧。那个 padding 会吃掉
@@ -335,7 +544,24 @@ window.__ModuleLoader__.load({
     function isOurs(node) {
       var element = node?.nodeType === 1 ? node : node?.parentElement;
       return (
-        element?.closest?.("." + HOST_CLASS + ", ." + BTN_CLASS + ", ." + MMD_CLASS + ", ." + FOLD_BTN_CLASS) != null
+        element?.closest?.(
+          "." +
+            HOST_CLASS +
+            ", ." +
+            BTN_CLASS +
+            ", ." +
+            MMD_CLASS +
+            ", ." +
+            FOLD_BTN_CLASS +
+            ", ." +
+            TABLE_TOOLS_CLASS +
+            ", ." +
+            IMG_MODAL_CLASS +
+            ", ." +
+            SETTINGS_BTN_CLASS +
+            ", ." +
+            SETTINGS_MODAL_CLASS,
+        ) != null
       );
     }
 
@@ -359,6 +585,8 @@ window.__ModuleLoader__.load({
         void enhance(block);
       }
       scanFolds();
+      // 宿主重渲染可能把整块 body 换掉，设置入口跟着补回来
+      ensureSettingsButton();
     }
 
     function onMutations(records) {
@@ -394,8 +622,8 @@ window.__ModuleLoader__.load({
     var PLAIN_BUTTONS = [
       {
         cls: TOOL_CLASS,
-        title: "不换行（横向滚动）",
-        aria: "切换代码换行",
+        titleKey: "wrapTitle",
+        ariaKey: "wrapAria",
         run: (block) => {
           if (block.getAttribute(WRAP_ATTR) === "on") block.removeAttribute(WRAP_ATTR);
           else block.setAttribute(WRAP_ATTR, "on");
@@ -403,32 +631,32 @@ window.__ModuleLoader__.load({
       },
     ];
     var MMD_BUTTONS = [
-      { cls: ZOOM_OUT_CLASS, title: "缩小", aria: "缩小流程图", run: (block) => zoomBy(block, 1 / ZOOM_STEP) },
-      { cls: ZOOM_IN_CLASS, title: "放大", aria: "放大流程图", run: (block) => zoomBy(block, ZOOM_STEP) },
+      { cls: ZOOM_OUT_CLASS, titleKey: "zoomOut", ariaKey: "zoomOutAria", run: (block) => zoomBy(block, 1 / ZOOM_STEP) },
+      { cls: ZOOM_IN_CLASS, titleKey: "zoomIn", ariaKey: "zoomInAria", run: (block) => zoomBy(block, ZOOM_STEP) },
       {
         cls: TOGGLE_CLASS,
-        title: "切换图形 / 代码",
-        aria: "切换图形与代码",
+        titleKey: "toggle",
+        ariaKey: "toggleAria",
         run: (block) => {
           var next = block.getAttribute(MMD_ATTR) === "code" ? "diagram" : "code";
           block.setAttribute(MMD_ATTR, next);
           var viewport = block.querySelector("." + MMD_CLASS + "-viewport");
           if (viewport !== null) {
             resetFold(viewport);
-            scheduleFold(viewport, FOLD_LIMITS.diagram);
+            scheduleFold(viewport, foldLimit("diagram"));
           }
         },
       },
       {
         cls: EXPAND_CLASS,
-        title: "全屏查看",
-        aria: "全屏查看流程图",
+        titleKey: "fullscreen",
+        ariaKey: "fullscreenAria",
         run: (block) => openFullscreen(block),
       },
       {
         cls: THEME_CLASS,
-        title: "切换 Mermaid 配色",
-        aria: "切换 Mermaid 配色",
+        titleKey: "theme",
+        ariaKey: "themeAria",
         run: (block) => cycleMermaidTheme(block),
       },
     ];
@@ -472,12 +700,12 @@ window.__ModuleLoader__.load({
         var created = document.createElement("button");
         created.type = "button";
         created.className = BTN_CLASS + " " + spec.cls;
-        created.title = spec.title;
-        created.setAttribute("aria-label", spec.aria);
+        created.title = t(spec.titleKey);
+        created.setAttribute("aria-label", t(spec.ariaKey));
         if (spec.cls === THEME_CLASS) {
-          var themeLabel = "配色：" + (THEME_LABELS[getMermaidTheme()] ?? getMermaidTheme());
-          created.title = themeLabel;
-          created.setAttribute("aria-label", themeLabel);
+          var label = themeLabel(getMermaidTheme());
+          created.title = label;
+          created.setAttribute("aria-label", label);
         }
         created.addEventListener("click", () => spec.run(block));
         action.insertBefore(created, copy);
@@ -563,7 +791,7 @@ window.__ModuleLoader__.load({
       pre.after(host);
       block.setAttribute(KEY_ATTR, key);
       block.setAttribute(DONE_ATTR, "done");
-      scheduleFold(content, FOLD_LIMITS.code);
+      scheduleFold(content, foldLimit("code"));
     }
 
     /** 当前 Mermaid 配色；localStorage 不可用时回退到蓝色。 */
@@ -577,6 +805,18 @@ window.__ModuleLoader__.load({
       return "blue";
     }
 
+    function themeLabel(name) {
+      return t("themePrefix") + (THEME_LABELS[detectLang()][name] ?? name);
+    }
+
+    function refreshThemeButtons() {
+      var label = themeLabel(getMermaidTheme());
+      for (const button of document.querySelectorAll("." + THEME_CLASS)) {
+        button.title = label;
+        button.setAttribute("aria-label", label);
+      }
+    }
+
     /** 循环切换配色，并让所有已渲染的图重画。 */
     function cycleMermaidTheme(block) {
       var current = getMermaidTheme();
@@ -587,12 +827,7 @@ window.__ModuleLoader__.load({
       } catch {
         /* 存不下就只影响本次会话 */
       }
-      var button = block.querySelector("." + THEME_CLASS);
-      if (button !== null) {
-        var label = "配色：" + (THEME_LABELS[next] ?? next);
-        button.title = label;
-        button.setAttribute("aria-label", label);
-      }
+      refreshThemeButtons();
       redrawDiagrams();
     }
 
@@ -643,12 +878,13 @@ window.__ModuleLoader__.load({
       pre.before(host);
       content.querySelector("." + MMD_CLASS + "-error")?.remove();
       block.setAttribute(KEY_ATTR, key);
-      // 用户已经切到「代码」看源码时，重画完不要把他弹回图形
-      if (block.getAttribute(MMD_ATTR) !== "code") block.setAttribute(MMD_ATTR, "diagram");
+      // 用户手动切过视图就尊重当前选择；首次渲染用设置里的默认视图
+      var view = block.getAttribute(MMD_ATTR);
+      if (view !== "code" && view !== "diagram") block.setAttribute(MMD_ATTR, readSettings().diagramView);
       // 图换了，缩放归位
       zooms.delete(block);
       paint(block);
-      scheduleFold(viewport, FOLD_LIMITS.diagram);
+      scheduleFold(viewport, foldLimit("diagram"));
     }
 
     // ── 缩放 / 平移 ───────────────────────────────────────────────────
@@ -800,6 +1036,11 @@ window.__ModuleLoader__.load({
      */
     function scheduleFold(target, limit) {
       if (target === null) return;
+      if (!(limit > 0)) {
+        resetFold(target);
+        target.setAttribute(FOLD_ATTR, "none");
+        return;
+      }
       if (target.getAttribute(FOLD_ATTR) === "none") {
         // 首次测量可能发生在字体/高亮还没就位时，高度变大后再给它一次机会。
         if (target.scrollHeight <= limit) return;
@@ -819,12 +1060,12 @@ window.__ModuleLoader__.load({
         var button = document.createElement("button");
         button.type = "button";
         button.className = FOLD_BTN_CLASS;
-        button.textContent = "展开";
+        button.textContent = t("foldOpen");
         button.setAttribute("aria-expanded", "false");
         button.addEventListener("click", () => {
           var folded = target.getAttribute(FOLD_ATTR) === "on";
           target.setAttribute(FOLD_ATTR, folded ? "off" : "on");
-          button.textContent = folded ? "收起" : "展开";
+          button.textContent = folded ? t("foldClose") : t("foldOpen");
           button.setAttribute("aria-expanded", folded ? "true" : "false");
         });
         target.appendChild(button);
@@ -836,12 +1077,350 @@ window.__ModuleLoader__.load({
       for (const block of document.querySelectorAll(BLOCK)) {
         if (block.closest("[data-streaming]") !== null) continue;
         if (diagramKind(block) !== null) continue;
-        scheduleFold(block.querySelector(CONTENT), FOLD_LIMITS.code);
+        scheduleFold(block.querySelector(CONTENT), foldLimit("code"));
       }
       for (const table of document.querySelectorAll(TABLE)) {
         if (table.closest("[data-streaming]") !== null) continue;
-        scheduleFold(table, FOLD_LIMITS.table);
+        decorateTable(table);
+        scheduleFold(table, foldLimit("table"));
       }
+    }
+
+    // ── 表格复制 ─────────────────────────────────────────────────────
+    /** 单元格文本压成一行，避免多行内容把 CSV / Markdown 撑坏。 */
+    function cellText(cell) {
+      return (cell.textContent ?? "").replace(/\s+/g, " ").trim();
+    }
+
+    function tableRows(table) {
+      return Array.from(table.rows).map((row) => Array.from(row.cells).map(cellText));
+    }
+
+    function tableToCsv(rows) {
+      return rows
+        .map((row) =>
+          row
+            .map((value) => (/[",\n]/.test(value) ? '"' + value.replace(/"/g, '""') + '"' : value))
+            .join(","),
+        )
+        .join("\n");
+    }
+
+    function tableToMarkdown(rows) {
+      if (rows.length === 0) return "";
+      var width = Math.max(...rows.map((row) => row.length));
+      var line = (row) =>
+        "| " +
+        row
+          .concat(Array(width - row.length).fill(""))
+          .map((value) => value.replace(/\|/g, "\\|"))
+          .join(" | ") +
+        " |";
+      var output = [line(rows[0]), "| " + Array(width).fill("---").join(" | ") + " |"];
+      for (var index = 1; index < rows.length; index += 1) output.push(line(rows[index]));
+      return output.join("\n");
+    }
+
+    /** 写剪贴板；老环境没有 Clipboard API 时退回隐藏 textarea。 */
+    async function copyText(text) {
+      if (
+        window.navigator.clipboard !== undefined &&
+        typeof window.navigator.clipboard.writeText === "function"
+      ) {
+        await window.navigator.clipboard.writeText(text);
+        return true;
+      }
+      var area = document.createElement("textarea");
+      area.value = text;
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      var ok = false;
+      try {
+        ok = document.execCommand("copy");
+      } catch {
+        ok = false;
+      }
+      area.remove();
+      return ok;
+    }
+
+    function flashButton(button, text) {
+      var original = button.getAttribute("data-md-plus-label") ?? button.textContent;
+      button.setAttribute("data-md-plus-label", original);
+      button.textContent = text;
+      window.setTimeout(() => {
+        button.textContent = original;
+      }, 1200);
+    }
+
+    function decorateTable(table) {
+      var dataTable = table.querySelector("table");
+      if (dataTable === null) return;
+      // React 重渲染表格时可能把我们插的 caption 收走，不能只看一次标记
+      var first = dataTable.firstElementChild;
+      if (first !== null && first.classList.contains(TABLE_TOOLS_CLASS)) return;
+      table.setAttribute(TABLE_DONE_ATTR, "1");
+      // 用 caption 承载按钮：它的宽度天然跟表格一致，不会被外层 div 的整栏宽度拉走
+      var tools = document.createElement("caption");
+      tools.className = TABLE_TOOLS_CLASS;
+      for (const [kind, label, titleKey, convert] of [
+        ["csv", t("tableCsv"), "copyCsvTitle", tableToCsv],
+        ["md", t("tableMd"), "copyMdTitle", tableToMarkdown],
+      ]) {
+        var button = document.createElement("button");
+        button.type = "button";
+        button.textContent = label;
+        button.title = t(titleKey);
+        button.setAttribute("aria-label", t(titleKey));
+        button.addEventListener("click", async () => {
+          var ok = false;
+          try {
+            ok = await copyText(convert(tableRows(dataTable)));
+          } catch {
+            ok = false;
+          }
+          flashButton(button, ok ? t("copied") : t("copyFailed"));
+        });
+        tools.appendChild(button);
+      }
+      dataTable.insertBefore(tools, dataTable.firstChild);
+    }
+
+    // ── 图片放大 ─────────────────────────────────────────────────────
+    function openImage(source, alt) {
+      if (document.querySelector("." + IMG_MODAL_CLASS) !== null) return;
+      var overlay = document.createElement("div");
+      overlay.className = IMG_MODAL_CLASS;
+      overlay.setAttribute("role", "dialog");
+      overlay.setAttribute("aria-modal", "true");
+      overlay.setAttribute("aria-label", t("imageViewer"));
+
+      var image = document.createElement("img");
+      image.src = source;
+      image.alt = alt;
+      var closeButton = document.createElement("button");
+      closeButton.type = "button";
+      closeButton.className = IMG_MODAL_CLASS + "-close";
+      closeButton.textContent = "×";
+      closeButton.setAttribute("aria-label", t("imageClose"));
+
+      var previousFocus = document.activeElement;
+      var closed = false;
+      function closeViewer() {
+        if (closed) return;
+        closed = true;
+        document.removeEventListener("keydown", onKey, true);
+        overlay.remove();
+        if (previousFocus !== null && typeof previousFocus.focus === "function") previousFocus.focus();
+      }
+      function onKey(event) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeViewer();
+        }
+      }
+
+      overlay.addEventListener("pointerdown", (event) => {
+        if (event.target === overlay) closeViewer();
+      });
+      closeButton.addEventListener("click", closeViewer);
+      document.addEventListener("keydown", onKey, true);
+      overlay.appendChild(image);
+      overlay.appendChild(closeButton);
+      document.body.appendChild(overlay);
+      closeButton.focus();
+    }
+
+    /** 只认 markdown 正文里的图片；宿主自己的头像、图标和已有预览的图片不接管。 */
+    function onDocumentClick(event) {
+      if (event.button !== undefined && event.button !== 0) return;
+      var target = event.target;
+      var image = target?.closest?.("img");
+      if (image === null || image === undefined) return;
+      if (image.closest("." + IMG_MODAL_CLASS + ", .md-code-block, ." + SETTINGS_MODAL_CLASS) !== null) return;
+      if (image.closest('[class*="_markdown_"]') === null) return;
+      // 原生按钮和链接都有自己的点击职责，只给旧宿主里没有这两层的裸图片兜底。
+      if (image.closest(NATIVE_IMAGE_BUTTON) !== null || image.closest("a") !== null) return;
+      event.preventDefault();
+      openImage(image.currentSrc || image.src, image.alt || "");
+    }
+
+    // ── 设置面板 ─────────────────────────────────────────────────────
+    function settingRow(labelText, control) {
+      var row = document.createElement("div");
+      row.className = SETTINGS_MODAL_CLASS + "-row";
+      var label = document.createElement("span");
+      label.className = SETTINGS_MODAL_CLASS + "-label";
+      label.textContent = labelText;
+      row.appendChild(label);
+      row.appendChild(control);
+      return row;
+    }
+
+    function numberInput(value, min, max) {
+      var input = document.createElement("input");
+      input.type = "number";
+      input.min = String(min);
+      input.max = String(max);
+      input.value = value > 0 ? String(value) : "";
+      input.placeholder = "0";
+      return input;
+    }
+
+    function rescanFolds() {
+      for (const node of document.querySelectorAll("[" + FOLD_ATTR + "]")) resetFold(node);
+      for (const viewport of document.querySelectorAll("." + MMD_CLASS + "-viewport")) {
+        resetFold(viewport);
+        scheduleFold(viewport, foldLimit("diagram"));
+      }
+      scanFolds();
+    }
+
+    function openSettings() {
+      if (document.querySelector("." + SETTINGS_MODAL_CLASS) !== null) return;
+      var current = readSettings();
+      var overlay = document.createElement("div");
+      overlay.className = SETTINGS_MODAL_CLASS;
+      overlay.setAttribute("role", "dialog");
+      overlay.setAttribute("aria-modal", "true");
+      overlay.setAttribute("aria-label", t("settingsTitle"));
+
+      var panel = document.createElement("div");
+      panel.className = SETTINGS_MODAL_CLASS + "-panel";
+      var title = document.createElement("h2");
+      title.className = SETTINGS_MODAL_CLASS + "-title";
+      title.textContent = t("settingsTitle");
+      panel.appendChild(title);
+
+      var themeSelect = document.createElement("select");
+      for (const name of THEME_ORDER) {
+        var option = document.createElement("option");
+        option.value = name;
+        option.textContent = THEME_LABELS[detectLang()][name] ?? name;
+        themeSelect.appendChild(option);
+      }
+      themeSelect.value = getMermaidTheme();
+      panel.appendChild(settingRow(t("settingsTheme"), themeSelect));
+
+      var fontInput = numberInput(current.codeFontSize, 10, 20);
+      panel.appendChild(settingRow(t("settingsFontSize"), fontInput));
+      var fontHint = document.createElement("p");
+      fontHint.className = SETTINGS_MODAL_CLASS + "-hint";
+      fontHint.textContent = t("settingsFontSizeHint");
+      panel.appendChild(fontHint);
+
+      var viewSelect = document.createElement("select");
+      for (const [value, label] of [
+        ["diagram", t("settingsViewDiagram")],
+        ["code", t("settingsViewCode")],
+      ]) {
+        var viewOption = document.createElement("option");
+        viewOption.value = value;
+        viewOption.textContent = label;
+        viewSelect.appendChild(viewOption);
+      }
+      viewSelect.value = current.diagramView;
+      panel.appendChild(settingRow(t("settingsView"), viewSelect));
+
+      var foldHint = document.createElement("p");
+      foldHint.className = SETTINGS_MODAL_CLASS + "-hint";
+      foldHint.textContent = t("settingsFold") + " · " + t("settingsFoldHint");
+      panel.appendChild(foldHint);
+      var foldCode = numberInput(current.foldCode, 0, 4000);
+      var foldTable = numberInput(current.foldTable, 0, 4000);
+      var foldDiagram = numberInput(current.foldDiagram, 0, 4000);
+      panel.appendChild(settingRow(t("settingsFoldCode"), foldCode));
+      panel.appendChild(settingRow(t("settingsFoldTable"), foldTable));
+      panel.appendChild(settingRow(t("settingsFoldDiagram"), foldDiagram));
+
+      var actions = document.createElement("div");
+      actions.className = SETTINGS_MODAL_CLASS + "-actions";
+      var resetButton = document.createElement("button");
+      resetButton.type = "button";
+      resetButton.textContent = t("settingsReset");
+      var closeButton = document.createElement("button");
+      closeButton.type = "button";
+      closeButton.textContent = t("settingsClose");
+      var saveButton = document.createElement("button");
+      saveButton.type = "button";
+      saveButton.className = SETTINGS_MODAL_CLASS + "-primary";
+      saveButton.textContent = t("settingsSave");
+      actions.appendChild(resetButton);
+      actions.appendChild(closeButton);
+      actions.appendChild(saveButton);
+      panel.appendChild(actions);
+      overlay.appendChild(panel);
+
+      var previousFocus = document.activeElement;
+      var closed = false;
+      function closeSettings() {
+        if (closed) return;
+        closed = true;
+        document.removeEventListener("keydown", onKey, true);
+        overlay.remove();
+        if (previousFocus !== null && typeof previousFocus.focus === "function") previousFocus.focus();
+      }
+      function onKey(event) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeSettings();
+        }
+      }
+
+      function readNumber(input, fallback) {
+        var value = Number(input.value);
+        return Number.isFinite(value) && value >= 0 ? Math.min(4000, Math.round(value)) : fallback;
+      }
+
+      resetButton.addEventListener("click", () => {
+        themeSelect.value = "blue";
+        fontInput.value = "";
+        viewSelect.value = DEFAULT_SETTINGS.diagramView;
+        foldCode.value = "";
+        foldTable.value = "";
+        foldDiagram.value = "";
+      });
+      saveButton.addEventListener("click", () => {
+        saveSettings({
+          codeFontSize: readNumber(fontInput, 0),
+          diagramView: viewSelect.value === "code" ? "code" : "diagram",
+          foldCode: readNumber(foldCode, DEFAULT_SETTINGS.foldCode),
+          foldTable: readNumber(foldTable, DEFAULT_SETTINGS.foldTable),
+          foldDiagram: readNumber(foldDiagram, DEFAULT_SETTINGS.foldDiagram),
+        });
+        try {
+          window.localStorage.setItem(THEME_KEY, themeSelect.value);
+        } catch {
+          /* 存不下就只影响本次会话 */
+        }
+        applyCodeFontSize();
+        refreshThemeButtons();
+        redrawDiagrams();
+        rescanFolds();
+        closeSettings();
+      });
+      closeButton.addEventListener("click", closeSettings);
+      overlay.addEventListener("pointerdown", (event) => {
+        if (event.target === overlay) closeSettings();
+      });
+      document.addEventListener("keydown", onKey, true);
+      document.body.appendChild(overlay);
+      saveButton.focus();
+    }
+
+    function ensureSettingsButton() {
+      if (document.querySelector("." + SETTINGS_BTN_CLASS) !== null) return;
+      // 设置页、登录页没有 Markdown 内容，不往那种页面挂齿轮
+      if (document.querySelector('[class*="_markdown_"], .md-code-block') === null) return;
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = SETTINGS_BTN_CLASS;
+      button.title = t("settingsOpen");
+      button.setAttribute("aria-label", t("settingsOpen"));
+      button.addEventListener("click", openSettings);
+      document.body.appendChild(button);
     }
 
     /** 把图缩放到视口内能看见整张图；聊天内 viewport 高度跟图走，只有全屏用得上。 */
@@ -950,7 +1529,7 @@ window.__ModuleLoader__.load({
       overlay.className = MODAL_CLASS;
       overlay.setAttribute("role", "dialog");
       overlay.setAttribute("aria-modal", "true");
-      overlay.setAttribute("aria-label", "流程图全屏查看");
+      overlay.setAttribute("aria-label", t("diagramAria"));
 
       var panel = document.createElement("div");
       panel.className = MODAL_CLASS + "-panel";
@@ -959,30 +1538,30 @@ window.__ModuleLoader__.load({
       bar.className = MODAL_CLASS + "-bar";
       var title = document.createElement("div");
       title.className = MODAL_CLASS + "-title";
-      title.textContent = "流程图";
+      title.textContent = t("diagram");
       var actions = document.createElement("div");
       actions.className = MODAL_CLASS + "-actions";
 
       var fitButton = document.createElement("button");
       fitButton.type = "button";
-      fitButton.textContent = "适应整图";
+      fitButton.textContent = t("fit");
       var svgButton = document.createElement("button");
       svgButton.type = "button";
-      svgButton.textContent = "下载 SVG";
+      svgButton.textContent = t("downloadSvg");
       var pngButton = document.createElement("button");
       pngButton.type = "button";
-      pngButton.textContent = "下载 PNG";
+      pngButton.textContent = t("downloadPng");
       var zoomOut = document.createElement("button");
       zoomOut.type = "button";
       zoomOut.textContent = "−";
-      zoomOut.setAttribute("aria-label", "缩小");
+      zoomOut.setAttribute("aria-label", t("zoomOutAria"));
       var zoomIn = document.createElement("button");
       zoomIn.type = "button";
       zoomIn.textContent = "+";
-      zoomIn.setAttribute("aria-label", "放大");
+      zoomIn.setAttribute("aria-label", t("zoomInAria"));
       var closeButton = document.createElement("button");
       closeButton.type = "button";
-      closeButton.textContent = "关闭";
+      closeButton.textContent = t("close");
       actions.appendChild(fitButton);
       actions.appendChild(svgButton);
       actions.appendChild(pngButton);
@@ -1063,7 +1642,7 @@ window.__ModuleLoader__.load({
       note.className = MMD_CLASS + "-error";
       // 解析错误是多行报告，只留第一行，免得把卡片撑成一屏
       var reason = (error?.message ?? String(error)).split("\n")[0] ?? "";
-      note.textContent = "mermaid 渲染失败：" + reason;
+      note.textContent = t("renderFailed") + reason;
       content.appendChild(note);
       block.setAttribute(KEY_ATTR, key);
       block.setAttribute(MMD_ATTR, "failed");
@@ -1074,7 +1653,10 @@ window.__ModuleLoader__.load({
       if (typeof document === "undefined") return;
       ctx.effect(() => {
         injectStyle();
+        applyCodeFontSize();
+        ensureSettingsButton();
         var root = document.body ?? document.documentElement;
+        document.addEventListener("click", onDocumentClick, true);
         var observer = new MutationObserver(onMutations);
         observer.observe(root, {
           childList: true,
@@ -1086,15 +1668,32 @@ window.__ModuleLoader__.load({
         schedule();
         return () => {
           observer.disconnect();
+          document.removeEventListener("click", onDocumentClick, true);
           for (const node of injected) node.remove();
           injected.clear();
-          for (const node of document.querySelectorAll("." + FOLD_CLASS)) resetFold(node);
+          for (const node of document.querySelectorAll("[" + FOLD_ATTR + "]")) resetFold(node);
+          for (const node of document.querySelectorAll("." + TABLE_TOOLS_CLASS)) node.remove();
+          for (const table of document.querySelectorAll("[" + TABLE_DONE_ATTR + "]")) {
+            table.removeAttribute(TABLE_DONE_ATTR);
+          }
           for (const node of document.querySelectorAll(
-            "." + MMD_CLASS + ", ." + MMD_CLASS + "-error, ." + MODAL_CLASS,
+            "." +
+              MMD_CLASS +
+              ", ." +
+              MMD_CLASS +
+              "-error, ." +
+              MODAL_CLASS +
+              ", ." +
+              IMG_MODAL_CLASS +
+              ", ." +
+              SETTINGS_BTN_CLASS +
+              ", ." +
+              SETTINGS_MODAL_CLASS,
           )) {
             node.remove();
           }
           document.documentElement.style.overflow = "";
+          document.documentElement.style.removeProperty("--md-plus-code-font-size");
           document.querySelector("style[" + STYLE_ATTR + "]")?.remove();
           for (const script of document.querySelectorAll("script[" + RUNTIME_ATTR + "]")) {
             script.remove();
