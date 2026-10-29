@@ -232,8 +232,7 @@ button{font-family:inherit}
 .dark-toggle{appearance:none;border:1px solid #d9dce3;background:#fff;border-radius:8px;padding:5px 10px;font-size:12px;color:#454b57;cursor:pointer}
 .dark-toggle:hover{border-color:#b9bec9}
 .page{max-width:940px;margin:0 auto;padding:34px 24px 130px}
-.hero{padding:34px 36px;border-radius:18px;background:radial-gradient(120% 160% at 100% 0%,#dfe7ff 0%,#f7f8fb 52%,#fff 100%);
-  border:1px solid #e6e9f1;margin-bottom:26px}
+.hero{padding:34px 36px;border-radius:18px;background:#f7f8fb;border:1px solid #e6e9f1;margin-bottom:26px}
 .hero .eyebrow{font:600 11px/1.4 ui-monospace,monospace;letter-spacing:.12em;color:#5b6ee1;text-transform:uppercase}
 .hero h1{margin:8px 0 10px;font-size:34px;line-height:1.18;letter-spacing:-.02em;color:#14161c}
 .hero p{margin:0;max-width:620px;color:#5e6572;font-size:14px;line-height:1.75}
@@ -257,7 +256,7 @@ body[data-ds-dark-theme] .brand{color:#eef0f6}
 body[data-ds-dark-theme] .topbar nav a{color:#a6adbb}
 body[data-ds-dark-theme] .topbar nav a:hover{background:#242833;color:#fff}
 body[data-ds-dark-theme] .dark-toggle{background:#1c1f27;border-color:#323744;color:#d7dbe5}
-body[data-ds-dark-theme] .hero{background:radial-gradient(120% 160% at 100% 0%,#1e2a52 0%,#171a22 55%,#14161c 100%);border-color:#282d3a}
+body[data-ds-dark-theme] .hero{background:#171a22;border-color:#282d3a}
 body[data-ds-dark-theme] .hero h1{color:#f4f6fb}
 body[data-ds-dark-theme] .hero p{color:#a9b0bf}
 body[data-ds-dark-theme] .hero .tags span{background:#1c2029;border-color:#303542;color:#b5bdcc}
