@@ -114,7 +114,7 @@ function section(id, number, title, desc, body) {
 const JSON_CODE = [
   "{",
   '  "name": "dsh-md-plus",',
-  '  "version": "0.4.0",',
+  '  "version": "0.4.1",',
   '  "engines": { "node": ">=22.19.0" },',
   '  "features": ["code", "mermaid", "table", "image", "settings"]',
   "}",

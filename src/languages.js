@@ -1,4 +1,4 @@
-// dsh-md-plus 补的高亮语言（DSH 自带 26 种之外的部分）。
+// dsh-md-plus 补的高亮语言（DSH 自带语言表之外的部分）。
 // 想加语言：在对应分组里补一个 id，再在文件末尾的 LANGUAGE_MODULES 里挂上。
 // id 取自 @shikijs/langs 的模块名；每个模块的默认导出是一个 LanguageRegistration[]，
 // 里面通常还含它依赖的嵌入语法（如 vue 带 html/css），所以整份交给 loadLanguage。

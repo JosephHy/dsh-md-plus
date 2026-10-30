@@ -1,5 +1,5 @@
 // dsh-md-plus 的 mermaid 运行时：打包成 lib/mermaid-runtime.js，由宿主半经同源路由按需下发。
-// 只有检测到 mermaid 围栏时才会加载——没用到就不下载这 3MB。
+// 只有检测到 mermaid 围栏时才会加载——没用到就不下载这 5MB 运行时。
 import mermaid from "mermaid";
 import { buildConfig, NODE_RADIUS } from "./mermaid-theme.js";
 

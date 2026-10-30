@@ -27,18 +27,18 @@ dsh plugin --profile desktop remove dsh-md-plus
 ```powershell
 npm install       # 顺带跑 prepare → build
 npm run build     # 产出 lib/ 下四个文件
-npm run check     # 语法检查 + 65 条测试（先 build 再跑，check 不含 build）
+npm run check     # 语法检查 + 72 条测试（先 build 再跑，check 不含 build）
 npm run preview   # 生成 preview.html（含真渲出来的 mermaid 图）
 npm run shot      # 用 headless Chrome 把 preview.html 截成 docs/preview.png
 ```
 
 ## 已知限制
 
-- DSH 0.2.0-rc.2 上，头部语言名由宿主决定：不认这门语言就显示占位文案「代码块」，插件读不到围栏语言，补高亮基本失效。mermaid 因此改看正文里的类型声明来识别。
+- DSH 0.2.1-rc.4 的头部语言名由宿主决定：不认识的围栏只显示占位文案「代码块」。插件会从宿主的 React fiber 里兜底读取真实语言，读不到时才退回正文嗅探；宿主改 React 结构后这条兜底可能失效。
 - `DSH_LANGS` 是 DSH 语言表的快照（108 条）。宿主加语言后这份快照会落后，落后只会多一次无效处理，不会出现双份高亮。
 - mermaid 12 的新图种（`usecase-beta`、`agentflow-beta`）标识符只认字母数字下划线，中文得写进标签：`actor Customer("用户")` 可以，`actor 用户` 会解析失败。
 - 高亮约 6.4 MB、mermaid 约 5.0 MB，按需下载，第一次用到时多花约 100ms 解析。
-- 依赖宿主 `.md-code-block`、`[data-code-block-content]`、`[data-code-block-banner]`、`data-streaming` 等钩子，DSH 改版后要同步调整 `src/client.js`。
+- 依赖宿主 `.md-code-block`、`[data-code-block-content]`、`[data-code-block-banner]`、`data-streaming` 等钩子，以及 React fiber 里的 `lang`；DSH 改版后要同步调整 `src/client.js`。
 
 目前只影响代码块、mermaid、表格、正文图片和显示设置，不改 Markdown 的解析结果。
 

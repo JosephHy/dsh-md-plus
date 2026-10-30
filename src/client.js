@@ -4,12 +4,11 @@
 //   1) 样式 —— 把 DSH 的代码块重做成参考图那种「整块一个卡片 + 图标化头部」，
 //      并消掉没有语言时头部那一大片空白。纯 CSS 打在 .md-code-block 上，
 //      所以所有语言（包括 DSH 自己高亮的）都吃到同一套样式。
-//   2) 高亮 —— DSH 只认死 26 种语言，其余走 pre.plain 纯文本回退，看上去就是
+//   2) 高亮 —— DSH 语言表里没有的围栏会走 pre.plain 纯文本回退，看上去就是
 //      一堆没颜色的源码。这里把那些块捡出来重新上色，结果插在原 <pre> 后面
 //      并把它藏掉——原节点不动，所以 DSH 的复制按钮仍然照常工作。
 //   3) 图形 —— mermaid 围栏自己渲染成 SVG（取代 dsh-mermaid）。判断依据是
-//      头部显示的语言名，所以 graph / flowchart 两种写法都能画——dsh-mermaid
-//      当年漏了 graph，正是它画不出来的原因。
+//      围栏语言，读不到时再看正文里的类型声明，所以 graph / flowchart 两种写法都能画。
 window.__ModuleLoader__.load({
   id: "dsh-md-plus",
   factory: (require) => {
@@ -40,6 +39,7 @@ window.__ModuleLoader__.load({
     var ZOOM_MIN_EPSILON = 0.001;
     var EXPAND_CLASS = "md-plus-expand";
     var THEME_CLASS = "md-plus-theme";
+    var RETRY_CLASS = "md-plus-retry";
     var THEME_KEY = "dsh-md-plus-mermaid-theme";
     var THEME_ORDER = ["blue", "neutral", "forest", "contrast"];
     var THEME_LABELS = {
@@ -71,6 +71,8 @@ window.__ModuleLoader__.load({
         themePrefix: "配色：",
         foldOpen: "展开",
         foldClose: "收起",
+        retry: "重试",
+        retryAria: "重新渲染图表",
         renderFailed: "mermaid 渲染失败：",
         diagram: "流程图",
         diagramAria: "流程图全屏查看",
@@ -122,6 +124,8 @@ window.__ModuleLoader__.load({
         themePrefix: "Theme: ",
         foldOpen: "Expand",
         foldClose: "Collapse",
+        retry: "Retry",
+        retryAria: "Retry diagram",
         renderFailed: "Mermaid render failed: ",
         diagram: "Diagram",
         diagramAria: "Diagram fullscreen viewer",
@@ -231,8 +235,13 @@ window.__ModuleLoader__.load({
     /** 代码字号是全局 CSS 变量；0 表示跟随宿主，不写任何东西。 */
     function applyCodeFontSize() {
       var size = readSettings().codeFontSize;
-      if (size > 0) document.documentElement.style.setProperty("--md-plus-code-font-size", size + "px");
-      else document.documentElement.style.removeProperty("--md-plus-code-font-size");
+      if (size > 0) {
+        document.documentElement.style.setProperty("--md-plus-code-font-size", size + "px");
+        document.documentElement.style.setProperty("--md-plus-code-line-height", Math.round(size * 1.6) + "px");
+      } else {
+        document.documentElement.style.removeProperty("--md-plus-code-font-size");
+        document.documentElement.style.removeProperty("--md-plus-code-line-height");
+      }
     }
 
     // DSH 自带高亮的语言别名，对齐 dsh-client-ui-primitives/lib/index.js 里的 LANG_ALIASES。
@@ -266,10 +275,14 @@ window.__ModuleLoader__.load({
     // `supportsHighlighting(lang) ? lang : labels.codeLabel`，mermaid 不在它的表里，
     // 所以标签显示的是占位文案（中文「代码块」），readLang() 读不到围栏语言。
     // 兜底：认不出标签时看正文——mermaid 的类型声明必须单独占一行。
-    // 这张表只给图表识别用，不能回流进 readLang()：后者是分流依据，
+    // 这些正则只给图表识别用，不能回流进 readLang()：后者是分流依据，
     // 凭正文改判会让「不认的语言」再也不去补高亮。
     // usecase-beta / agentflow-beta 是 mermaid 12.x 才有的图种，引擎不到 12 就画不出来。
-    var MMD_TYPE = /^\s*(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|quadrantChart|xychart-beta|sankey-beta|block-beta|packet-beta|architecture-beta|usecase-beta|agentflow-beta|C4Context|requirementDiagram|kanban|radar|treemap|venn|ishikawa|wardley|cynefin|treeView|zenuml)\b/im;
+    var MMD_FLOW = /^\s*(flowchart|graph)(?:\s+(?:TD|TB|BT|RL|LR))?\s*;?\s*$/i;
+    var MMD_PIE = /^\s*pie(?:\s+title\b.*)?\s*;?\s*$/i;
+    var MMD_GIT = /^\s*gitGraph(?:\s+(?:LR|TB|BT|RL))?:?\s*;?\s*$/i;
+    var MMD_SINGLE =
+      /^\s*(sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|mindmap|timeline|quadrantChart|xychart-beta|sankey-beta|block-beta|packet-beta|architecture-beta|usecase-beta|agentflow-beta|C4Context|requirementDiagram|kanban|radar|treemap|venn|ishikawa|wardley|cynefin|treeView|zenuml)\s*;?\s*$/i;
 
     /** 把 SVG 包成 CSS mask 能用的 data URI；形状走 alpha 通道，颜色交给 currentColor。 */
     function icon(paths) {
@@ -309,6 +322,9 @@ window.__ModuleLoader__.load({
     var ICON_THEME = icon(
       "<path d='M12 3s5 5.5 5 9a5 5 0 0 1-10 0c0-3.5 5-9 5-9z'/><path d='M9.5 12a2.5 2.5 0 0 0 5 0'/>",
     );
+    var ICON_RETRY = icon(
+      "<path d='M20 11a8 8 0 1 0-2.34 5.66'/><path d='M20 4v7h-7'/>",
+    );
     var ICON_GEAR = icon(
       "<circle cx='12' cy='12' r='3'/>" +
         "<path d='M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.14.36.48.6.87.61H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z'/>",
@@ -325,7 +341,7 @@ window.__ModuleLoader__.load({
 
     var CSS = [
       // ── 卡片：整块一个底色，顶栏不再是独立色带 ──────────────────────
-      ".md-code-block{--md-plus-mmd-min-height:200px;--md-plus-icon:" + ICON_CODE + ";--md-plus-icon-copy:" + ICON_COPY + ";--md-plus-icon-nowrap:" + ICON_NOWRAP + ";--md-plus-icon-diagram:" + ICON_DIAGRAM + ";--md-plus-icon-zoom-in:" + ICON_ZOOM_IN + ";--md-plus-icon-zoom-out:" + ICON_ZOOM_OUT + ";--md-plus-icon-expand:" + ICON_EXPAND + ";--md-plus-icon-theme:" + ICON_THEME + "}",
+      ".md-code-block{--md-plus-mmd-min-height:200px;--md-plus-icon:" + ICON_CODE + ";--md-plus-icon-copy:" + ICON_COPY + ";--md-plus-icon-nowrap:" + ICON_NOWRAP + ";--md-plus-icon-diagram:" + ICON_DIAGRAM + ";--md-plus-icon-zoom-in:" + ICON_ZOOM_IN + ";--md-plus-icon-zoom-out:" + ICON_ZOOM_OUT + ";--md-plus-icon-expand:" + ICON_EXPAND + ";--md-plus-icon-theme:" + ICON_THEME + ";--md-plus-icon-retry:" + ICON_RETRY + "}",
       // bannerWrap 的原底色是 --dsw-alias-bg-base（#fff），会跟卡片灰拉开一条带
       ".md-code-block > div:has(> " + BANNER + "){background:transparent}",
 
@@ -344,6 +360,9 @@ window.__ModuleLoader__.load({
       // pre 的行高本身就在首行文字上方留了约半行空白；补 6px 后实测间距约 17px
       // （原来给 0 时只有 11px，贴着看太挤）
       ".md-code-block pre{padding:6px 16px 16px;font-size:var(--md-plus-code-font-size,inherit)}",
+      ".md-code-block pre{line-height:var(--md-plus-code-line-height,inherit)}",
+      // DSH 0.2.1 把内容容器设成 display:contents，折叠需要真实的盒子才能量高度和裁剪
+      ".md-code-block > [data-code-block-content]{display:block}",
 
       // ── 头部按钮：文字换成图标 ──────────────────────────────────────
       ".md-code-block " + BANNER + " button{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:0;border-radius:6px;font-size:0;cursor:pointer;background:transparent;color:var(--dsw-alias-label-tertiary);transition:background-color .12s ease,color .12s ease}",
@@ -365,6 +384,7 @@ window.__ModuleLoader__.load({
       ".md-code-block " + BANNER + " ." + ZOOM_OUT_CLASS + "::before{-webkit-mask:var(--md-plus-icon-zoom-out) center/contain no-repeat;mask:var(--md-plus-icon-zoom-out) center/contain no-repeat}",
       ".md-code-block " + BANNER + " ." + EXPAND_CLASS + "::before{-webkit-mask:var(--md-plus-icon-expand) center/contain no-repeat;mask:var(--md-plus-icon-expand) center/contain no-repeat}",
       ".md-code-block " + BANNER + " ." + THEME_CLASS + "::before{-webkit-mask:var(--md-plus-icon-theme) center/contain no-repeat;mask:var(--md-plus-icon-theme) center/contain no-repeat}",
+      ".md-code-block " + BANNER + " ." + RETRY_CLASS + "::before{-webkit-mask:var(--md-plus-icon-retry) center/contain no-repeat;mask:var(--md-plus-icon-retry) center/contain no-repeat}",
       '[' + MMD_ATTR + '="diagram"] .' + TOGGLE_CLASS + "{color:var(--dsw-alias-button-primary-fill,#4c6ef5);background:var(--dsw-alias-interactive-bg-active,rgb(76 110 245 / 12%))}",
       // 已经到最小 / 最大时，对应那颗按钮变淡且不可点
       '[' + ZOOM_ATTR + '="min"] .' + ZOOM_OUT_CLASS + ",[" + ZOOM_ATTR + '="max"] .' + ZOOM_IN_CLASS + "{opacity:.3;pointer-events:none}",
@@ -439,7 +459,7 @@ window.__ModuleLoader__.load({
       // 抓手用结构选择器而不是 DSH 的哈希类名：外层是「唯一子元素是 table 的 div」。
       // 前面挂 [class*="_markdown_"] 有两个作用——只认 markdown 渲染出来的表格，
       // 同时把特异性顶到 (0,1,4)，压过 DSH 自己的 .tableScroll th (0,1,1)。
-      TABLE + "{position:relative;margin-block:16px;" + TABLE_VARS + "}",
+      TABLE + "{position:relative;margin-block:16px;max-height:min(70vh,720px);overflow-y:auto;overscroll-behavior-y:contain;" + TABLE_VARS + "}",
       "body[data-ds-dark-theme] " + TABLE + "{" + TABLE_VARS_DARK + "}",
       // 整张表一个 1px 边框 + 小圆角。
       // 注意必须是 separate：collapse 模式下 Chrome 会忽略单元格的圆角，
@@ -508,8 +528,25 @@ window.__ModuleLoader__.load({
         script.src = url;
         script.async = true;
         script.setAttribute(RUNTIME_ATTR, "1");
-        script.addEventListener("load", () => resolve(window[globalName] ?? null), { once: true });
-        script.addEventListener("error", () => resolve(null), { once: true });
+        script.addEventListener(
+          "load",
+          () => {
+            var api = window[globalName];
+            // 脚本加载成功但全局没就位（或被别的实例清掉）时不要永久缓存 null
+            if (api === undefined) scripts.delete(url);
+            resolve(api ?? null);
+          },
+          { once: true },
+        );
+        script.addEventListener(
+          "error",
+          () => {
+            scripts.delete(url);
+            script.remove();
+            resolve(null);
+          },
+          { once: true },
+        );
         document.head.appendChild(script);
       });
       scripts.set(url, promise);
@@ -517,33 +554,118 @@ window.__ModuleLoader__.load({
     }
 
     /** 围栏信息串里的语言；banner 的第一个元素就是它。 */
-    function readLang(block) {
+    function readBannerLabel(block) {
       var banner = block.querySelector(BANNER);
-      var info = banner?.firstElementChild;
+      var info = banner?.querySelector('[class*="_language_"]') ?? banner?.firstElementChild;
       return (info?.textContent ?? "").trim().toLowerCase();
+    }
+
+    // DSH 的 CodeToolbar 对不认识的围栏只显示这个占位文案，读不到真实语言。
+    var PLACEHOLDER_LABELS = new Set(["", "代码块", "code block", "code", "plain text", "plaintext", "纯文本"]);
+    var FIBER_KEY = "__reactFiber$";
+
+    function isPlaceholderLabel(label) {
+      return PLACEHOLDER_LABELS.has(label);
+    }
+
+    /**
+     * DSH 把真实 lang 放在 CodeBlock 的 React props 里，DOM 上只有占位文案。
+     * 从元素上的 React fiber 往上找最近的 lang，作为占位标签下的兜底。
+     * @returns {{hasLang: boolean, lang: string} | null}
+     */
+    function readFiberLang(block) {
+      var info = null;
+      var nodes = [block, block.querySelector(CONTENT)];
+      for (var node of nodes) {
+        if (node === null || node === undefined) continue;
+        var names;
+        try {
+          names = Object.getOwnPropertyNames(node);
+        } catch {
+          continue;
+        }
+        for (var name of names) {
+          if (name.lastIndexOf(FIBER_KEY, 0) !== 0) continue;
+          var fiber = node[name];
+          for (var depth = 0; fiber !== null && fiber !== undefined && depth < 24; depth += 1) {
+            var props = fiber.memoizedProps;
+            if (props !== null && typeof props === "object" && Object.prototype.hasOwnProperty.call(props, "lang")) {
+              var value = typeof props.lang === "string" ? props.lang.trim().toLowerCase() : "";
+              info = { hasLang: value !== "", lang: value };
+              break;
+            }
+            fiber = fiber.return;
+          }
+          if (info !== null) break;
+        }
+        if (info !== null) break;
+      }
+      return info;
+    }
+
+    /** 真实围栏语言；占位标签下优先问 React props，取不到就返回空串交给正文嗅探。 */
+    function readLang(block) {
+      var label = readBannerLabel(block);
+      if (!isPlaceholderLabel(label)) return label;
+      var info = readFiberLang(block);
+      return info === null ? "" : info.lang;
+    }
+
+    /** 把占位标签换成真实语言名；React 重渲染后下次扫描会再补。 */
+    function paintLanguageLabel(block, lang) {
+      if (lang === "") return;
+      var banner = block.querySelector(BANNER);
+      var heading = banner?.firstElementChild;
+      if (heading === null || heading === undefined) return;
+      var target = banner.querySelector('[class*="_language_"]') ?? heading;
+      if ((target.textContent ?? "").trim().toLowerCase() === lang) return;
+      if (!target.hasAttribute("data-md-plus-original-label")) {
+        target.setAttribute("data-md-plus-original-label", target.textContent ?? "");
+      }
+      target.textContent = lang;
+      target.setAttribute("data-md-plus-lang", lang);
     }
 
     /** 正文里的图类型；没有就是 null。先剥掉 %% 注释行与 --- frontmatter 块。 */
     function sniffDiagramType(code) {
-      var text = code;
+      var lines = code.split("\n");
+      var start = 0;
+      while (start < lines.length) {
+        var line = lines[start].trim();
+        if (line === "" || line.startsWith("%%")) {
+          start += 1;
+          continue;
+        }
+        break;
+      }
+      var text = lines.slice(start).join("\n");
       if (text.startsWith("---")) {
         var blank = text.indexOf("\n");
         var close = blank < 0 ? -1 : text.indexOf("\n---", blank);
         text = close < 0 ? "" : text.slice(close + 4);
       }
-      var body = text
-        .split("\n")
-        .filter((line) => !line.trimStart().startsWith("%%"))
-        .join("\n");
-      return MMD_TYPE.exec(body)?.[1] ?? null;
+      var first = text.split("\n").find((line) => {
+        var value = line.trim();
+        return value !== "" && !value.startsWith("%%");
+      });
+      if (first === undefined) return null;
+      var value = first.trim();
+      var flow = MMD_FLOW.exec(value);
+      if (flow !== null) return flow[1];
+      if (MMD_PIE.test(value)) return "pie";
+      if (MMD_GIT.test(value)) return "gitGraph";
+      var single = MMD_SINGLE.exec(value);
+      return single === null ? null : single[1];
     }
 
     /**
      * 这块是不是 mermaid 图形。围栏名认得最可靠；标签被宿主换成占位文案时，
-     * 退回正文嗅探（见 MMD_TYPE 那段注释）。
+     * 退回正文嗅探（见 MMD_FLOW 那段注释）。
      */
     function diagramKind(block) {
-      if (MMD_LANGS.has(readLang(block))) return "diagram";
+      var lang = readLang(block);
+      if (MMD_LANGS.has(lang)) return "diagram";
+      if (lang !== "") return null;
       var pre = block.querySelector(CONTENT + " pre");
       if (pre === null) return null;
       return sniffDiagramType(pre.textContent ?? "") === null ? null : "diagram";
@@ -620,7 +742,8 @@ window.__ModuleLoader__.load({
     }
 
     function redrawDiagrams() {
-      for (const block of document.querySelectorAll("[" + MMD_ATTR + '="diagram"]')) {
+      for (const block of document.querySelectorAll("[" + MMD_ATTR + "]")) {
+        if (block.getAttribute(MMD_ATTR) === "failed") continue;
         block.removeAttribute(KEY_ATTR);
         pending.add(block);
       }
@@ -670,6 +793,20 @@ window.__ModuleLoader__.load({
       },
     ];
 
+    var FAILED_BUTTONS = [
+      {
+        cls: RETRY_CLASS,
+        titleKey: "retry",
+        ariaKey: "retryAria",
+        run: (block) => {
+          block.removeAttribute(KEY_ATTR);
+          block.removeAttribute(MMD_ATTR);
+          block.querySelector("." + MMD_CLASS + "-error")?.remove();
+          void enhance(block);
+        },
+      },
+    ];
+
     /** 找到宿主自带的换行按钮；新版 CodeToolbar 已经有这颗，别再补一颗。 */
     function findNativeWrap(buttons) {
       if (buttons === undefined) return null;
@@ -693,12 +830,18 @@ window.__ModuleLoader__.load({
       var action = copy?.parentElement;
       if (action === null || action === undefined) return;
 
+      var label = readBannerLabel(block);
+      var lang = readLang(block);
+      if (lang !== "" && isPlaceholderLabel(label)) paintLanguageLabel(block, lang);
+
       var specs =
-        readLang(block) !== "" && diagramKind(block) !== null
-          ? MMD_BUTTONS
-          : findNativeWrap(nativeButtons) !== null
-            ? []
-            : PLAIN_BUTTONS;
+        block.getAttribute(MMD_ATTR) === "failed"
+          ? FAILED_BUTTONS
+          : diagramKind(block) !== null
+            ? MMD_BUTTONS
+            : findNativeWrap(nativeButtons) !== null
+              ? []
+              : PLAIN_BUTTONS;
       for (const existing of action.querySelectorAll("." + BTN_CLASS)) {
         if (specs.some((spec) => existing.classList.contains(spec.cls))) continue;
         existing.remove();
@@ -712,9 +855,9 @@ window.__ModuleLoader__.load({
         created.title = t(spec.titleKey);
         created.setAttribute("aria-label", t(spec.ariaKey));
         if (spec.cls === THEME_CLASS) {
-          var label = themeLabel(getMermaidTheme());
-          created.title = label;
-          created.setAttribute("aria-label", label);
+          var themeText = themeLabel(getMermaidTheme());
+          created.title = themeText;
+          created.setAttribute("aria-label", themeText);
         }
         created.addEventListener("click", () => spec.run(block));
         action.insertBefore(created, copy);
@@ -756,11 +899,12 @@ window.__ModuleLoader__.load({
       if (pre === null || pre.classList.contains("shiki")) return;
 
       var lang = readLang(block);
-      if (lang === "") return;
+      if (lang !== "" && isPlaceholderLabel(readBannerLabel(block))) paintLanguageLabel(block, lang);
       if (diagramKind(block) !== null) {
         await renderDiagram(block, content, pre);
         return;
       }
+      if (lang === "") return;
       if (DSH_LANGS.has(lang)) return;
 
       var api = await loadScript(HL_URL, HL_GLOBAL);
@@ -894,6 +1038,7 @@ window.__ModuleLoader__.load({
       zooms.delete(block);
       paint(block);
       scheduleFold(viewport, foldLimit("diagram"));
+      decorate(block);
     }
 
     // ── 缩放 / 平移 ───────────────────────────────────────────────────
@@ -971,12 +1116,14 @@ window.__ModuleLoader__.load({
     }
 
     /** 滚轮缩放 + 放大后拖拽；双击回到 100%，全屏里双击回到整图。 */
-    function bindViewport(block, viewport, resetView) {
+    function bindViewport(block, viewport, resetView, alwaysZoom) {
       var drag = null;
 
       viewport.addEventListener(
         "wheel",
         (event) => {
+          // 1 倍时普通滚轮继续滚页面，只有按住 Ctrl/Meta 才缩放；全屏里始终缩放
+          if (!alwaysZoom && !event.ctrlKey && !event.metaKey && zoomState(block).scale <= 1.001) return;
           event.preventDefault();
           zoomBy(block, event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP, event.clientX, event.clientY);
         },
@@ -1387,22 +1534,30 @@ window.__ModuleLoader__.load({
         }
       }
 
-      function readNumber(input, fallback) {
+      function readNumber(input, fallback, max) {
         var value = Number(input.value);
-        return Number.isFinite(value) && value >= 0 ? Math.min(4000, Math.round(value)) : fallback;
+        return Number.isFinite(value) && value >= 0
+          ? Math.min(max ?? 4000, Math.round(value))
+          : fallback;
+      }
+
+      function readFontSize(input) {
+        var value = Number(input.value);
+        if (!Number.isFinite(value) || value <= 0) return 0;
+        return Math.min(20, Math.max(10, Math.round(value)));
       }
 
       resetButton.addEventListener("click", () => {
         themeSelect.value = "blue";
         fontInput.value = "";
         viewSelect.value = DEFAULT_SETTINGS.diagramView;
-        foldCode.value = "";
-        foldTable.value = "";
-        foldDiagram.value = "";
+        foldCode.value = String(DEFAULT_SETTINGS.foldCode);
+        foldTable.value = String(DEFAULT_SETTINGS.foldTable);
+        foldDiagram.value = String(DEFAULT_SETTINGS.foldDiagram);
       });
       saveButton.addEventListener("click", () => {
         saveSettings({
-          codeFontSize: readNumber(fontInput, 0),
+          codeFontSize: readFontSize(fontInput),
           diagramView: viewSelect.value === "code" ? "code" : "diagram",
           foldCode: readNumber(foldCode, DEFAULT_SETTINGS.foldCode),
           foldTable: readNumber(foldTable, DEFAULT_SETTINGS.foldTable),
@@ -1645,7 +1800,7 @@ window.__ModuleLoader__.load({
       document.addEventListener("keydown", onKey, true);
 
       zooms.set(overlay, { scale: 1, x: 0, y: 0, min: ZOOM_MIN_MODAL });
-      bindViewport(overlay, viewport, reset);
+      bindViewport(overlay, viewport, reset, true);
       document.documentElement.style.overflow = "hidden";
       document.body.appendChild(overlay);
       closeButton.focus();
@@ -1664,6 +1819,7 @@ window.__ModuleLoader__.load({
       content.appendChild(note);
       block.setAttribute(KEY_ATTR, key);
       block.setAttribute(MMD_ATTR, "failed");
+      decorate(block);
       console.warn("[dsh-md-plus] mermaid 渲染失败", error);
     }
 
@@ -1689,10 +1845,17 @@ window.__ModuleLoader__.load({
           document.removeEventListener("click", onDocumentClick, true);
           for (const node of injected) node.remove();
           injected.clear();
+          for (const node of document.querySelectorAll("." + BTN_CLASS)) node.remove();
+          for (const node of document.querySelectorAll("." + HOST_CLASS)) node.remove();
+          for (const node of document.querySelectorAll("." + FOLD_BTN_CLASS)) node.remove();
           for (const node of document.querySelectorAll("[" + FOLD_ATTR + "]")) resetFold(node);
           for (const node of document.querySelectorAll("." + TABLE_TOOLS_CLASS)) node.remove();
-          for (const table of document.querySelectorAll("[" + TABLE_DONE_ATTR + "]")) {
-            table.removeAttribute(TABLE_DONE_ATTR);
+          for (const attr of [DONE_ATTR, KEY_ATTR, WRAP_ATTR, MMD_ATTR, TABLE_DONE_ATTR, "data-md-plus-lang"]) {
+            for (const node of document.querySelectorAll("[" + attr + "]")) node.removeAttribute(attr);
+          }
+          for (const node of document.querySelectorAll("[data-md-plus-original-label]")) {
+            node.textContent = node.getAttribute("data-md-plus-original-label") ?? node.textContent;
+            node.removeAttribute("data-md-plus-original-label");
           }
           for (const node of document.querySelectorAll(
             "." +
@@ -1712,6 +1875,7 @@ window.__ModuleLoader__.load({
           }
           document.documentElement.style.overflow = "";
           document.documentElement.style.removeProperty("--md-plus-code-font-size");
+          document.documentElement.style.removeProperty("--md-plus-code-line-height");
           document.querySelector("style[" + STYLE_ATTR + "]")?.remove();
           for (const script of document.querySelectorAll("script[" + RUNTIME_ATTR + "]")) {
             script.remove();

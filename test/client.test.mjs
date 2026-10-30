@@ -129,6 +129,20 @@ test("给 DSH 不认识的语言补上高亮", async () => {
   assert.equal(block.getAttribute("data-md-plus"), "done");
 });
 
+test("占位标签下从 React fiber 取真实语言并补高亮", async () => {
+  mount();
+  document.body.innerHTML = toolbarBlockHtml("代码块", "func _ready() {}");
+  const block = document.querySelector(".md-code-block");
+  Object.defineProperty(block, "__reactFiber$test", {
+    value: { return: { memoizedProps: { lang: "gdscript" } } },
+    configurable: true,
+  });
+  await settle();
+
+  assert.ok(block.querySelector(".md-plus-hl"), "应按 fiber 里的 gdscript 补上高亮");
+  assert.equal(block.querySelector("._language_x").textContent, "gdscript", "头部要显示真实语言");
+});
+
 test("原 <pre> 留在原位，DSH 的复制按钮仍读到纯文本", async () => {
   mount();
   document.body.innerHTML = codeBlockHtml("gdscript", "func _ready() {}");
@@ -259,6 +273,26 @@ test("占位文案不会被当成图：普通代码留在代码形态", async ()
   assert.equal(block.querySelectorAll("[data-code-block-banner] button").length, 2, "保留原生换行与复制");
   const src = block.querySelector("[data-code-block-content] pre");
   assert.equal(src.textContent, "void main() {}", "源码原样留着，复制仍拿到原文");
+});
+
+test("普通代码里的 graph = / pie = / timeline = 不会被当成 mermaid", async () => {
+  for (const source of [
+    "graph = nx.Graph()\nprint(graph)",
+    "graph.add_edge('A', 'B')",
+    "graph := nx.Graph()",
+    "pie = 3.14",
+    "timeline = []",
+  ]) {
+    mount();
+    window.__DSH_MD_PLUS_MMD__.calls.length = 0;
+    document.body.innerHTML = toolbarBlockHtml("代码块", source);
+    await settle();
+
+    const block = document.querySelector(".md-code-block");
+    assert.equal(window.__DSH_MD_PLUS_MMD__.calls.length, 0, `${source} 不该被送去画图`);
+    assert.equal(block.hasAttribute("data-md-plus-mmd"), false, `${source} 不该标成图块`);
+    assert.equal(block.querySelectorAll("[data-code-block-banner] button").length, 2, "保留原生按钮");
+  }
 });
 
 test("标签本身是 mermaid 系时照旧按标签认（mmd / mermaidjs / menu 里的 mmd）", async () => {
@@ -451,12 +485,23 @@ test("缩到最小后再点缩小不越界", async () => {
 test("滚轮上下缩放流程图", async () => {
   const block = await mermaidBlock();
   const viewport = block.querySelector(".md-plus-mmd-viewport");
+  block.querySelector(".md-plus-zoom-in").dispatchEvent(new window.Event("click"));
 
   viewport.dispatchEvent(new window.WheelEvent("wheel", { deltaY: -120, bubbles: true, cancelable: true }));
-  assert.match(stageTransform(block), /scale\(1\.25\)$/, "往上滚 = 放大");
+  assert.match(stageTransform(block), /scale\(1\.5625\)$/, "放大后往上滚继续放大");
 
   viewport.dispatchEvent(new window.WheelEvent("wheel", { deltaY: 120, bubbles: true, cancelable: true }));
-  assert.match(stageTransform(block), /scale\(1\)$/, "往下滚 = 缩小");
+  assert.match(stageTransform(block), /scale\(1\.25\)$/, "放大后往下滚缩小");
+});
+
+test("1 倍时普通滚轮不拦截页面滚动", async () => {
+  const block = await mermaidBlock();
+  const viewport = block.querySelector(".md-plus-mmd-viewport");
+  const event = new window.WheelEvent("wheel", { deltaY: -120, bubbles: true, cancelable: true });
+  viewport.dispatchEvent(event);
+
+  assert.equal(event.defaultPrevented, false, "普通滚轮要留给页面");
+  assert.match(stageTransform(block), /scale\(1\)$/, "没按 Ctrl 不该缩放");
 });
 
 test("双击回到 100%", async () => {
@@ -611,6 +656,14 @@ test("渲染失败退回源码并挂出原因", async () => {
   const note = block.querySelector(".md-plus-mmd-error");
   assert.ok(note, "要挂一行失败原因");
   assert.match(note.textContent, /Parse error on line 2/);
+
+  const retry = block.querySelector(".md-plus-retry");
+  assert.ok(retry, "失败后要能给一颗重试按钮");
+  assert.equal(tagOf(block.querySelector(".md-plus-zoom-in")), "null", "失败后不该再显示缩放按钮");
+  const before = window.__DSH_MD_PLUS_MMD__.calls.length;
+  retry.dispatchEvent(new window.Event("click"));
+  await settle();
+  assert.equal(window.__DSH_MD_PLUS_MMD__.calls.length, before + 1, "点重试要重新渲染");
 });
 
 test("同内容不重复渲染，换主题才重画", async () => {
@@ -629,6 +682,22 @@ test("同内容不重复渲染，换主题才重画", async () => {
   document.body.removeAttribute("data-ds-dark-theme");
 });
 
+test("代码视图下切主题也会重画，切回图形使用新配色", async () => {
+  const block = await mermaidBlock();
+  block.querySelector(".md-plus-toggle").dispatchEvent(new window.Event("click"));
+  assert.equal(block.getAttribute("data-md-plus-mmd"), "code");
+  const before = window.__DSH_MD_PLUS_MMD__.calls.length;
+
+  document.body.setAttribute("data-ds-dark-theme", "");
+  await settle();
+  assert.equal(window.__DSH_MD_PLUS_MMD__.calls.length, before + 1, "代码视图下也要重画");
+  assert.equal(window.__DSH_MD_PLUS_MMD__.calls.at(-1).dark, true);
+
+  block.querySelector(".md-plus-toggle").dispatchEvent(new window.Event("click"));
+  assert.ok(block.querySelector(".md-plus-mmd svg"), "切回图形要有图");
+  document.body.removeAttribute("data-ds-dark-theme");
+});
+
 test("卸载时把图形和失败提示一起摘掉", async () => {
   const effects = [];
   const ctx = { effect: (fn) => { effects.push(fn()); } };
@@ -640,6 +709,25 @@ test("卸载时把图形和失败提示一起摘掉", async () => {
 
   effects[0]();
   assert.equal(document.querySelectorAll(".md-plus-mmd").length, 0, "卸载要摘掉图形");
+});
+
+test("卸载时清掉高亮副本和 data-md-plus 属性", async () => {
+  const effects = [];
+  const ctx = { effect: (fn) => { effects.push(fn()); } };
+  window.__DSH_MD_PLUS_HL__ ??= hlRuntime;
+  window.__DSH_MD_PLUS_MMD__ ??= mermaidStub;
+  document.body.innerHTML = "";
+  api.apply(ctx);
+  document.body.innerHTML = codeBlockHtml("gdscript", "func _ready() {}");
+  await settle();
+  const block = document.querySelector(".md-code-block");
+  assert.equal(document.querySelectorAll(".md-plus-hl").length, 1);
+
+  effects[0]();
+  assert.equal(document.querySelectorAll(".md-plus-hl").length, 0, "高亮宿主必须摘掉");
+  assert.equal(block.querySelectorAll("pre").length, 1, "不能留下两份代码");
+  assert.equal(block.hasAttribute("data-md-plus"), false, "done 标记要清掉");
+  assert.equal(block.hasAttribute("data-md-plus-key"), false, "key 缓存要清掉");
 });
 
 test("流式输出期间不动手，定稿后补上", async () => {
@@ -712,6 +800,14 @@ test("样式表针对所有代码块，不只是补高亮的那些", async () =>
   assert.match(css, /\.md-code-block pre\{padding:6px 16px 16px;font-size:var\(--md-plus-code-font-size,inherit\)\}/, "首行代码上方补 6px，别贴着头部");
   assert.match(css, /\{background:transparent\}/, "要去掉 bannerWrap 的白色色带");
   assert.match(css, /md-plus-icon-copy/, "复制按钮要换成图标");
+});
+
+test("代码内容有真实盒模型，表格有纵向滚动上限", async () => {
+  mount();
+  await settle();
+  const css = stylesheet();
+  assert.match(css, /\.md-code-block > \[data-code-block-content\]\{display:block\}/, "代码内容要能被量高和裁剪");
+  assert.match(css, /div:has\(> table\)\{[^}]*max-height:min\(70vh,720px\);overflow-y:auto/, "长表要有纵向滚动容器");
 });
 
 test("图标是自包含的 data URI，不依赖外部资源", async () => {
@@ -934,8 +1030,32 @@ test("设置面板保存字号、折叠阈值、配色和默认视图", async ()
   );
   assert.equal(window.localStorage.getItem("dsh-md-plus-mermaid-theme"), "forest");
   assert.equal(document.documentElement.style.getPropertyValue("--md-plus-code-font-size"), "15px");
+  assert.equal(document.documentElement.style.getPropertyValue("--md-plus-code-line-height"), "24px");
   assert.equal(tagOf(document.querySelector(".md-plus-settings-modal")), "null", "保存后要关闭面板");
 });
+
+test("设置面板恢复默认会写回默认折叠阈值", async () => {
+  mount();
+  document.body.innerHTML = codeBlockHtml("dart", "int a = 1;");
+  await settle();
+  document.querySelector(".md-plus-settings-btn").dispatchEvent(new window.Event("click"));
+  const modal = document.querySelector(".md-plus-settings-modal");
+  const actions = [...modal.querySelectorAll(".md-plus-settings-modal-actions button")];
+  actions[0].dispatchEvent(new window.Event("click"));
+
+  const [font, foldCode, foldTable, foldDiagram] = modal.querySelectorAll("input");
+  assert.equal(font.value, "");
+  assert.equal(foldCode.value, "480");
+  assert.equal(foldTable.value, "520");
+  assert.equal(foldDiagram.value, "720");
+
+  actions[2].dispatchEvent(new window.Event("click"));
+  assert.equal(
+    window.localStorage.getItem("dsh-md-plus-settings"),
+    JSON.stringify({ codeFontSize: 0, diagramView: "diagram", foldCode: 480, foldTable: 520, foldDiagram: 720 }),
+  );
+});
+
 
 test("英文界面下按钮文案切换", async () => {
   document.documentElement.lang = "en-US";
