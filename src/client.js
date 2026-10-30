@@ -193,6 +193,8 @@ window.__ModuleLoader__.load({
     var STYLE_ATTR = "data-md-plus-style";
     var RUNTIME_ATTR = "data-md-plus-runtime";
     var DEBOUNCE_MS = 160;
+    var memorySettings = null;
+    var memoryTheme = null;
 
     /** 读本地设置；坏值逐项回退，避免一个字段写坏拖垮全部功能。 */
     function readSettings() {
@@ -211,17 +213,19 @@ window.__ModuleLoader__.load({
             if (Number.isFinite(value) && value >= 0) settings[key] = Math.min(4000, Math.round(value));
           }
         }
+        memorySettings = { ...settings };
       } catch {
-        /* 隐私模式或存了坏 JSON 时按默认值走 */
+        if (memorySettings !== null) return { ...DEFAULT_SETTINGS, ...memorySettings };
       }
       return settings;
     }
 
     function saveSettings(next) {
+      memorySettings = { ...next };
       try {
         window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
       } catch {
-        /* 存不下就只影响本次会话 */
+        /* 存不下时保留这次会话的内存副本 */
       }
     }
 
@@ -278,11 +282,11 @@ window.__ModuleLoader__.load({
     // 这些正则只给图表识别用，不能回流进 readLang()：后者是分流依据，
     // 凭正文改判会让「不认的语言」再也不去补高亮。
     // usecase-beta / agentflow-beta 是 mermaid 12.x 才有的图种，引擎不到 12 就画不出来。
-    var MMD_FLOW = /^\s*(flowchart|graph)(?:\s+(?:TD|TB|BT|RL|LR))?\s*;?\s*$/i;
-    var MMD_PIE = /^\s*pie(?:\s+title\b.*)?\s*;?\s*$/i;
+    var MMD_FLOW = /^\s*(flowchart(?:-elk)?|graph)(?:\s+(?:TD|TB|BT|RL|LR))?\s*;?\s*$/i;
+    var MMD_PIE = /^\s*pie(?:\s+(?:showData|title)\b.*)?\s*;?\s*$/i;
     var MMD_GIT = /^\s*gitGraph(?:\s+(?:LR|TB|BT|RL))?:?\s*;?\s*$/i;
     var MMD_SINGLE =
-      /^\s*(sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|mindmap|timeline|quadrantChart|xychart-beta|sankey-beta|block-beta|packet-beta|architecture-beta|usecase-beta|agentflow-beta|C4Context|requirementDiagram|kanban|radar|treemap|venn|ishikawa|wardley|cynefin|treeView|zenuml)\s*;?\s*$/i;
+      /^\s*(sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|mindmap|timeline|quadrantChart|xychart-beta|sankey-beta|block-beta|packet-beta|architecture-beta|usecase-beta|agentflow-beta|C4Context|requirementDiagram|kanban|radar-beta|treemap(?:-beta)?|venn-beta|ishikawa(?:-beta)?|wardley-beta|cynefin-beta|treeView-beta|info|eventmodeling|swimlane-beta|railroad-beta|railroad-abnf-beta|railroad-ebnf-beta|railroad-peg-beta)\s*;?\s*$/i;
 
     /** 把 SVG 包成 CSS mask 能用的 data URI；形状走 alpha 通道，颜色交给 currentColor。 */
     function icon(paths) {
@@ -514,6 +518,7 @@ window.__ModuleLoader__.load({
     var rescanQueued = false;
     var injected = new Set();
     var diagramSeq = 0;
+    var disposed = false;
 
     function injectStyle() {
       if (document.querySelector("style[" + STYLE_ATTR + "]") !== null) return;
@@ -702,6 +707,7 @@ window.__ModuleLoader__.load({
     }
 
     function schedule(block) {
+      if (disposed) return;
       if (block !== undefined) pending.add(block);
       else rescanQueued = true;
       if (timer !== null) return;
@@ -710,6 +716,7 @@ window.__ModuleLoader__.load({
 
     function flush() {
       timer = null;
+      if (disposed) return;
       if (rescanQueued) {
         rescanQueued = false;
         for (const block of document.querySelectorAll(BLOCK)) pending.add(block);
@@ -913,7 +920,7 @@ window.__ModuleLoader__.load({
       if (DSH_LANGS.has(lang)) return;
 
       var api = await loadScript(HL_URL, HL_GLOBAL);
-      if (api === null || !api.supports(lang)) return;
+      if (disposed || api === null || !api.supports(lang)) return;
 
       if (!pre.isConnected) return;
       var code = pre.textContent ?? "";
@@ -928,6 +935,7 @@ window.__ModuleLoader__.load({
       } catch {
         return;
       }
+      if (disposed) return;
       if (typeof html !== "string" || html === "") return;
       // 异步期间源码可能被流式改写，那就等下一次
       if (!pre.isConnected || (pre.textContent ?? "") !== code) {
@@ -952,13 +960,17 @@ window.__ModuleLoader__.load({
       scheduleFold(content, foldLimit("code"));
     }
 
-    /** 当前 Mermaid 配色；localStorage 不可用时回退到蓝色。 */
+    /** 当前 Mermaid 配色；localStorage 不可用时回退到本次会话缓存。 */
     function getMermaidTheme() {
       try {
         var saved = window.localStorage.getItem(THEME_KEY);
-        if (saved !== null && THEME_ORDER.indexOf(saved) !== -1) return saved;
+        if (saved !== null && THEME_ORDER.indexOf(saved) !== -1) {
+          memoryTheme = saved;
+          return saved;
+        }
+        memoryTheme = null;
       } catch {
-        /* 隐私模式或禁用存储时保持默认 */
+        if (memoryTheme !== null) return memoryTheme;
       }
       return "blue";
     }
@@ -980,10 +992,11 @@ window.__ModuleLoader__.load({
       var current = getMermaidTheme();
       var index = THEME_ORDER.indexOf(current);
       var next = THEME_ORDER[(index + 1) % THEME_ORDER.length];
+      memoryTheme = next;
       try {
         window.localStorage.setItem(THEME_KEY, next);
       } catch {
-        /* 存不下就只影响本次会话 */
+        /* 存不下时保留这次会话的内存副本 */
       }
       refreshThemeButtons();
       redrawDiagrams();
@@ -996,7 +1009,7 @@ window.__ModuleLoader__.load({
       if (block.getAttribute(KEY_ATTR) === key) return;
 
       var api = await loadScript(MMD_URL, MMD_GLOBAL);
-      if (api === null) return;
+      if (disposed || api === null) return;
       if (!pre.isConnected) return;
 
       var svg;
@@ -1004,9 +1017,11 @@ window.__ModuleLoader__.load({
         var dark = document.body.hasAttribute("data-ds-dark-theme");
         svg = await api.render("dsh-md-plus-mmd-" + ++diagramSeq, code, dark, getMermaidTheme());
       } catch (error) {
+        if (disposed) return;
         failDiagram(block, content, pre, key, error);
         return;
       }
+      if (disposed) return;
       if (typeof svg !== "string" || svg === "") return;
       // 引擎陈旧时错误卡片会被当成渲染成功返回，别把它当图插进卡片
       if (svg.includes('aria-roledescription="error"')) {
@@ -1590,10 +1605,11 @@ window.__ModuleLoader__.load({
           foldTable: readNumber(foldTable, DEFAULT_SETTINGS.foldTable),
           foldDiagram: readNumber(foldDiagram, DEFAULT_SETTINGS.foldDiagram),
         });
+        memoryTheme = themeSelect.value;
         try {
           window.localStorage.setItem(THEME_KEY, themeSelect.value);
         } catch {
-          /* 存不下就只影响本次会话 */
+          /* 存不下时保留这次会话的内存副本 */
         }
         applyCodeFontSize();
         refreshThemeButtons();
@@ -1853,6 +1869,7 @@ window.__ModuleLoader__.load({
     function apply0(ctx) {
       if (typeof document === "undefined") return;
       ctx.effect(() => {
+        disposed = false;
         injectStyle();
         applyCodeFontSize();
         ensureSettingsButton();
@@ -1868,6 +1885,13 @@ window.__ModuleLoader__.load({
         });
         schedule();
         return () => {
+          disposed = true;
+          if (timer !== null) {
+            window.clearTimeout(timer);
+            timer = null;
+          }
+          pending.clear();
+          rescanQueued = false;
           observer.disconnect();
           document.removeEventListener("click", onDocumentClick, true);
           for (const node of injected) node.remove();
@@ -1877,7 +1901,7 @@ window.__ModuleLoader__.load({
           for (const node of document.querySelectorAll("." + FOLD_BTN_CLASS)) node.remove();
           for (const node of document.querySelectorAll("[" + FOLD_ATTR + "]")) resetFold(node);
           for (const node of document.querySelectorAll("." + TABLE_TOOLS_CLASS)) node.remove();
-          for (const attr of [DONE_ATTR, KEY_ATTR, WRAP_ATTR, MMD_ATTR, TABLE_DONE_ATTR, "data-md-plus-lang"]) {
+          for (const attr of [DONE_ATTR, KEY_ATTR, WRAP_ATTR, MMD_ATTR, TABLE_DONE_ATTR, "data-md-plus-lang", ZOOM_ATTR]) {
             for (const node of document.querySelectorAll("[" + attr + "]")) node.removeAttribute(attr);
           }
           for (const node of document.querySelectorAll("[data-md-plus-original-label]")) {

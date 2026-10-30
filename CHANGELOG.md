@@ -1,6 +1,16 @@
 # 更新日志
 
-## 0.4.2 —— 未发布
+## 0.4.3 —— 未发布
+
+- 修复补高亮语言映射：`hbs` / `jade` / `tscn` / `tres` 分别使用 handlebars / pug / gdresource 语法着色。
+- 修复 Mermaid 12.1 在占位标签兜底路径下的图种识别：补充 `radar-beta`、`treemap-beta`、`venn-beta`、`ishikawa-beta`、`wardley-beta`、`cynefin-beta`、`treeView-beta`、`flowchart-elk` 等，并去掉无效裸关键字的误判。
+- 修复插件卸载后 debounce 扫描重新插入按钮、设置入口和折叠控件的问题，同时清理 `data-md-plus-zoom` 属性。
+- 修复 localStorage 不可用时设置保存和配色切换连当前会话都不生效的问题。
+- 修复运行时路由 ETag 只依赖文件大小和 mtime、内容更新后仍可能返回 304 的问题。
+- 同步能力展示页和 README 预览图到当前 DSH 样式，并把所有版本引用更新为 0.4.3。
+- 测试补到 78 条，新增别名语言、Mermaid 新图种、卸载清理、localStorage 降级和 ETag 回归用例。
+
+## 0.4.2 —— 2026-10-30
 
 - 修复鼠标悬浮表格或折叠内容时吞掉页面滚轮：移除表格容器的 `overscroll-behavior` containment，折叠态改为保留横向滚动、纵向 `overflow-y: clip`，并覆盖 DSH 宿主 `.tableScroll` 自带的横向 containment。
 - 修复宽表横向滚动条出现 / 消失时鼠标移入移出表格造成的上下跳动：取消 hover 阶段的 padding 切换，固定底部留白。

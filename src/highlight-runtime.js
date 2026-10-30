@@ -20,8 +20,14 @@ const MODULE_OF = new Map();
 const GRAMMAR_OF = new Map();
 
 for (const [id, registrations] of Object.entries(LANGUAGE_MODULES)) {
-  // 模块的主语法：优先取与模块同名的那条，否则取第一条
-  const primary = registrations.find((r) => r.name.toLowerCase() === id) ?? registrations[0];
+  // 模块 id 可能只是 registration 的 alias（如 hbs → handlebars、tscn → gdresource），
+  // 先按 name 再按 alias 找目标语法；不能直接取第一个，第一个常是嵌入依赖语法。
+  const primary =
+    registrations.find((r) => r.name.toLowerCase() === id) ??
+    registrations.find((r) =>
+      (r.aliases ?? []).some((alias) => String(alias).toLowerCase() === id),
+    ) ??
+    registrations[0];
   GRAMMAR_OF.set(id, primary.name);
   MODULE_OF.set(id, id);
   MODULE_OF.set(primary.name.toLowerCase(), id);

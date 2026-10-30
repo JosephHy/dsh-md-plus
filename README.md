@@ -27,10 +27,12 @@ dsh plugin --profile desktop remove dsh-md-plus
 ```powershell
 npm install       # 顺带跑 prepare → build
 npm run build     # 产出 lib/ 下四个文件
-npm run check     # 语法检查 + 73 条测试（先 build 再跑，check 不含 build）
+npm run check     # 语法检查 + 78 条测试（先 build 再跑，check 不含 build）
 npm run preview   # 生成 preview.html（含真渲出来的 mermaid 图）
 npm run shot      # 用 headless Chrome 把 preview.html 截成 docs/preview.png
 ```
+
+`npm run preview` / `scripts/showcase.mjs` 需要读取 DSH 安装目录里的主题和前端资源；如果本机 DSH 是 `app.asar` 包，请先解包到目录，并把 `DSH_APP_DIR` 指向该目录。
 
 ## 已知限制
 

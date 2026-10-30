@@ -333,6 +333,31 @@ test("12.x 新图种 usecase-beta / agentflow-beta 在占位标签下也认", as
   }
 });
 
+test("mermaid 12.1 新图种在占位标签下也能识别", async () => {
+  for (const keyword of [
+    "radar-beta",
+    "treemap-beta",
+    "venn-beta",
+    "ishikawa-beta",
+    "wardley-beta",
+    "cynefin-beta",
+    "treeView-beta",
+    "flowchart-elk LR",
+  ]) {
+    mount();
+    window.__DSH_MD_PLUS_MMD__.calls.length = 0;
+    document.body.innerHTML = toolbarBlockHtml("代码块", `${keyword}\n  A --> B`);
+    await settle();
+
+    assert.equal(window.__DSH_MD_PLUS_MMD__.calls.length, 1, `${keyword} 应该送去渲染`);
+    assert.equal(
+      document.querySelector(".md-code-block").getAttribute("data-md-plus-mmd"),
+      "diagram",
+      `${keyword} 要标成图块`,
+    );
+  }
+});
+
 test("渲染器吐出错误卡片时，回退源码 + 一行原因（不把卡片当图）", async () => {
   mount();
   // mermaid 画不出来时返回的就是这张卡片，客户端不能把它当图插进卡片里
@@ -747,6 +772,22 @@ test("卸载时清掉高亮副本和 data-md-plus 属性", async () => {
   assert.equal(block.hasAttribute("data-md-plus-key"), false, "key 缓存要清掉");
 });
 
+test("卸载时取消待执行的 debounce 扫描，不复活插件节点", async () => {
+  const effects = [];
+  const ctx = { effect: (fn) => { effects.push(fn()); } };
+  window.__DSH_MD_PLUS_HL__ ??= hlRuntime;
+  window.__DSH_MD_PLUS_MMD__ ??= mermaidStub;
+  document.body.innerHTML = "";
+  api.apply(ctx);
+  document.body.innerHTML = codeBlockHtml("dart", "int a = 1;");
+
+  effects[0]();
+  await new Promise((resolve) => setTimeout(resolve, DEBOUNCE_MS + 240));
+
+  assert.equal(document.querySelectorAll(".md-plus-tool").length, 0, "卸载后不应再插入不换行按钮");
+  assert.equal(document.querySelectorAll(".md-plus-settings-btn").length, 0, "卸载后不应再插入设置入口");
+});
+
 test("流式输出期间不动手，定稿后补上", async () => {
   mount();
   document.body.innerHTML =
@@ -788,6 +829,22 @@ test("未知语言安静跳过", async () => {
   document.body.innerHTML = codeBlockHtml("notalanguage", "???");
   await settle();
   assert.equal(tagOf(document.querySelector(".md-plus-hl")), "null");
+});
+
+test("别名语言用目标语法高亮：hbs / jade / tscn / tres", async () => {
+  const cases = [
+    ["hbs", "handlebars", "{{#each items}}<li>{{this.name}}</li>{{/each}}"],
+    ["jade", "pug", "doctype html\nul\n  li Item"],
+    ["tscn", "gdresource", 'gd_resource type="Resource" format=3'],
+    ["tres", "gdresource", 'gd_resource type="Resource" format=3'],
+  ];
+  for (const [lang, target, code] of cases) {
+    const actual = await hlRuntime.highlight(code, lang);
+    const expected = await hlRuntime.highlight(code, target);
+    assert.ok(actual, `${lang} 应该有高亮结果`);
+    assert.ok(expected, `${target} 应该有高亮结果`);
+    assert.equal(actual, expected, `${lang} 应使用 ${target} 语法`);
+  }
 });
 
 test("卸载后不留下样式与观察者", async () => {
@@ -1113,6 +1170,35 @@ test("设置面板恢复默认会写回默认折叠阈值", async () => {
     window.localStorage.getItem("dsh-md-plus-settings"),
     JSON.stringify({ codeFontSize: 0, diagramView: "diagram", foldCode: 480, foldTable: 520, foldDiagram: 720 }),
   );
+});
+
+test("localStorage 不可用时设置保存仍能在当前会话生效", async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(window, "localStorage");
+  const blocked = {
+    getItem() { throw new Error("storage blocked"); },
+    setItem() { throw new Error("storage blocked"); },
+    removeItem() {},
+    clear() {},
+  };
+  Object.defineProperty(window, "localStorage", { configurable: true, value: blocked });
+  try {
+    mount();
+    document.body.innerHTML = codeBlockHtml("dart", "int a = 1;");
+    await settle();
+    document.querySelector(".md-plus-settings-btn").dispatchEvent(new window.Event("click"));
+    const modal = document.querySelector(".md-plus-settings-modal");
+    modal.querySelectorAll("input")[0].value = "15";
+    modal.querySelector(".md-plus-settings-modal-primary").dispatchEvent(new window.Event("click"));
+
+    assert.equal(
+      document.documentElement.style.getPropertyValue("--md-plus-code-font-size"),
+      "15px",
+      "存储失败只应影响持久化，不应影响当前会话",
+    );
+  } finally {
+    if (descriptor === undefined) delete window.localStorage;
+    else Object.defineProperty(window, "localStorage", descriptor);
+  }
 });
 
 

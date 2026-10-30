@@ -2,7 +2,10 @@
 // 而且它和浏览器半里的 URL 必须是同一个。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, stat, utimes, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { apply, name, inject, RUNTIMES } from "../lib/index.js";
 
 /** 收一次请求，返回 { status, headers, body }。 */
@@ -104,4 +107,29 @@ test("运行时响应不做长期强缓存，改用 ETag 回源校验", async ()
   const second = await request(route, "GET", { "if-none-match": first.headers.etag });
   assert.equal(second.status, 304, "内容没变要回 304");
   assert.equal(second.body, undefined, "304 不带响应体");
+});
+
+test("内容变化但大小和 mtime 不变时 ETag 也必须变化", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dsh-md-plus-host-"));
+  await copyFile(new URL("../lib/index.js", import.meta.url), join(dir, "index.js"));
+  const file = join(dir, "highlight-runtime.js");
+  await writeFile(file, "a".repeat(64));
+  await writeFile(join(dir, "mermaid-runtime.js"), "x".repeat(64));
+  const before = await stat(file);
+
+  const tempModule = await import(pathToFileURL(join(dir, "index.js")).href);
+  const routes = [];
+  tempModule.apply({
+    webServer: { register: (route) => { routes.push(route); return () => {}; } },
+    effect: (fn) => fn(),
+  });
+  const route = routes.find((item) => item.path === "/dsh-md-plus/highlight-runtime.js");
+  const first = await request(route);
+
+  await writeFile(file, "b".repeat(64));
+  await utimes(file, before.atime, before.mtime);
+  const second = await request(route, "GET", { "if-none-match": first.headers.etag });
+
+  assert.equal(second.status, 200, "内容变化后不能继续返回 304");
+  assert.equal(second.body.toString(), "b".repeat(64), "要返回新内容");
 });
