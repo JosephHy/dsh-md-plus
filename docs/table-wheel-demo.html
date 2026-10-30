@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dsh-md-plus 表格滚轮检查</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #f5f6f8;
+    color: #1f2329;
+    font: 14px/1.6 "Segoe UI", system-ui, sans-serif;
+  }
+  .demo {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 32px clamp(20px, 4vw, 48px) 0;
+  }
+  h1 { margin: 0 0 8px; font-size: 22px; }
+  .lead { margin: 0 0 24px; color: #59606c; }
+  .status {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    gap: 18px;
+    margin: 0 0 20px;
+    padding: 8px 12px;
+    border: 1px solid #d9dde5;
+    border-radius: 8px;
+    background: rgb(255 255 255 / 92%);
+    font: 13px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+  .status b { color: #4c6ef5; }
+  .hint {
+    margin: 0 0 12px;
+    padding: 10px 14px;
+    border-left: 3px solid #4c6ef5;
+    background: #eef1fe;
+    color: #424a59;
+    font-size: 13px;
+  }
+  .gap { height: 300px; }
+  .tail { height: 900px; }
+  /* 模拟 DSH 的表格外层：横向滚动 + 横向滚到底不带动页面 */
+  .tableScroll {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+  #long-table table { min-width: 1400px; }
+</style>
+</head>
+<body>
+<main class="demo _markdown_demo">
+  <h1>dsh-md-plus 表格滚轮检查</h1>
+  <p class="lead">鼠标停在下面任意表格上滚动滚轮：页面应该继续滚动；长表展开后，先在表格内部滚动，滚到底后页面接着滚动。</p>
+  <div class="status">页面 scrollY：<b id="page-y">0</b>　长表 scrollTop：<b id="table-y">0</b>　长表 scrollLeft：<b id="table-x">0</b></div>
+
+  <p class="hint">短表：滚轮经过表格时页面应该动。</p>
+  <div class="tableScroll md-table-wide">
+    <table>
+      <thead><tr><th>检查项</th><th>结果</th></tr></thead>
+      <tbody>
+        <tr><td>短表悬浮滚轮</td><td>页面应继续滚动</td></tr>
+        <tr><td>表格复制按钮</td><td>CSV / Markdown 正常</td></tr>
+        <tr><td>表头吸顶</td><td>长表内部滚动时保持可见</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="gap"></div>
+
+  <p class="hint">长表：默认折叠，鼠标停在折叠区域滚轮也应该能滚页面，横向滚轮或拖动横向滚动条可查看右侧列；点「展开」后再试，应该先滚表内、到底后接着滚页面。</p>
+  <div class="tableScroll md-table-wide" id="long-table">
+    <table>
+      <thead><tr><th>项目</th><th>说明</th><th>状态</th><th>负责人</th><th>更新时间</th><th>备注</th></tr></thead>
+      <tbody id="long-body"></tbody>
+    </table>
+  </div>
+
+  <div class="tail"></div>
+</main>
+<script>
+  const body = document.getElementById('long-body');
+  for (let i = 0; i < 30; i++) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td>第 ' + (i + 1) + ' 项</td><td>这是一段用来把表格撑高的说明文字，折叠后滚轮不应该被表格吞掉。</td><td>正常</td><td>张三</td><td>2026-10-30</td><td>横向滚动检查</td>';
+    body.appendChild(tr);
+  }
+
+  window.__ModuleLoader__ = {
+    load(entry) {
+      window.__DSH_MD_PLUS__ = entry.factory(function () {
+        throw new Error('client bundle 不该 require 任何模块');
+      });
+    },
+  };
+</script>
+<script src="../lib/client.js"></script>
+<script>
+  window.__DSH_MD_PLUS__.apply({ effect: (fn) => fn() });
+  const pageY = document.getElementById('page-y');
+  const tableY = document.getElementById('table-y');
+  const tableX = document.getElementById('table-x');
+  const longTable = document.getElementById('long-table');
+  const paint = () => {
+    pageY.textContent = Math.round(window.scrollY);
+    tableY.textContent = Math.round(longTable.scrollTop);
+    tableX.textContent = Math.round(longTable.scrollLeft);
+  };
+  window.addEventListener('scroll', paint);
+  longTable.addEventListener('scroll', paint);
+  paint();
+</script>
+</body>
+</html>

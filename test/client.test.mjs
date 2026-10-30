@@ -470,10 +470,17 @@ test("长表格超过阈值时出现展开按钮", async () => {
     '<div class="_markdown_x"><div id="long-table"><table><tbody><tr><td>x</td></tr></tbody></table></div></div>';
   const table = document.querySelector("#long-table");
   Object.defineProperty(table, "scrollHeight", { value: 900, configurable: true });
+  Object.defineProperty(table, "clientWidth", { value: 600, configurable: true });
+  Object.defineProperty(table, "scrollLeft", { value: 0, writable: true, configurable: true });
   await settle();
 
   assert.equal(table.getAttribute("data-md-plus-fold"), "on");
-  assert.ok(table.querySelector(".md-plus-fold-toggle"), "折叠后要有展开按钮");
+  const toggle = table.querySelector(".md-plus-fold-toggle");
+  assert.ok(toggle, "折叠后要有展开按钮");
+  assert.equal(toggle.style.left, "300px", "折叠按钮初始应位于可视区域中间");
+  table.scrollLeft = 200;
+  table.dispatchEvent(new window.Event("scroll"));
+  assert.equal(toggle.style.left, "500px", "横向滚动后按钮仍应跟随可视区域中心");
 });
 
 test("缩到最小后再点缩小不越界", async () => {
@@ -607,6 +614,16 @@ test("表格把 DSH 清零的首末列内边距还回去", async () => {
   assert.match(css, /> table th:first-child,.*> table td:first-child\{padding-left:16px/, "首列左边距");
   assert.match(css, /> table th:last-child,.*> table td:last-child\{padding-right:16px/, "末列右边距");
   assert.match(css, /> table tr:last-child td\{border-bottom:0\}/, "末行下边线交给外框，避免双线");
+  assert.match(
+    css,
+    /> table > caption\.md-plus-table-tools\{[^}]*position:sticky;right:0;width:0/,
+    "复制按钮的 caption 要固定在表格可视区域右上角",
+  );
+  assert.match(
+    css,
+    /caption\.md-plus-table-tools > span\{[^}]*position:absolute;right:0/,
+    "复制按钮组要绝对定位在 caption 右上角",
+  );
 });
 
 test("表格有深色主题的一套值", async () => {
@@ -810,6 +827,47 @@ test("代码内容有真实盒模型，表格有纵向滚动上限", async () =>
   assert.match(css, /div:has\(> table\)\{[^}]*max-height:min\(70vh,720px\);overflow-y:auto/, "长表要有纵向滚动容器");
 });
 
+test("表格和折叠内容不建立吞滚轮的滚动容器", async () => {
+  mount();
+  await settle();
+  const css = stylesheet();
+  assert.doesNotMatch(
+    css,
+    /div:has\(> table\)\{[^}]*overscroll-behavior[^;]*contain/,
+    "表格容器不能阻止滚轮链，否则短表也会吞掉页面滚轮",
+  );
+  assert.match(
+    css,
+    /div:has\(> table\)\{[^}]*overscroll-behavior:auto/,
+    "要盖掉宿主的 overscroll-behavior-x:contain",
+  );
+  assert.match(
+    css,
+    /\.md-plus-fold\[data-md-plus-fold="on"\]\{[^}]*overflow:clip/,
+    "折叠裁剪要用 overflow:clip，hidden 会变成隐形滚动容器",
+  );
+  assert.match(
+    css,
+    /div:has\(> table\)\.md-plus-fold\[data-md-plus-fold="on"\]\{overflow-x:auto;overflow-y:clip\}/,
+    "折叠宽表要保留横向滚动，同时纵向用 clip 避免吞滚轮",
+  );
+  assert.match(
+    css,
+    /div:has\(> table\)\.md-table-wide\{[^}]*padding-bottom:0/,
+    "宽表底部留白要固定为 0，不能随 hover 变化导致上下跳动",
+  );
+  assert.doesNotMatch(
+    css,
+    /\.md-table-wide:hover\{padding-bottom/,
+    "不要在 hover 时改宽表 padding，否则鼠标移入移出会上下跳",
+  );
+  assert.match(
+    css,
+    /\.md-plus-fold-toggle\{[^}]*white-space:nowrap/,
+    "折叠按钮不能换行，避免横向滚动时按钮自身变形",
+  );
+});
+
 test("图标是自包含的 data URI，不依赖外部资源", async () => {
   mount();
   await settle();
@@ -923,6 +981,7 @@ test("表格复制 CSV / Markdown", async () => {
 
   const tools = document.querySelector("#copy-table > table > .md-plus-table-tools");
   assert.ok(tools, "表格要挂出复制按钮");
+  assert.ok(tools.querySelector("span"), "复制按钮要放在独立定位组里");
   const buttons = [...tools.querySelectorAll("button")];
   assert.deepEqual(buttons.map((b) => b.textContent), ["CSV", "Markdown"]);
 
