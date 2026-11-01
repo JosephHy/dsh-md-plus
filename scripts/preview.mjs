@@ -134,7 +134,7 @@ function block(label, code, bodyHtml) {
 const JSON_CODE = [
   "{",
   '  "name": "dsh-md-plus",',
-  '  "version": "0.4.3",',
+  '  "version": "0.4.4",',
   '  "engines": { "node": ">=22.19.0" }',
   "}",
 ].join("\n");

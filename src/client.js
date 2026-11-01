@@ -425,7 +425,7 @@ window.__ModuleLoader__.load({
       // 用 clip 而不是 hidden：hidden 会建立隐形滚动容器，鼠标在折叠内容上滚轮会被它吞掉。
       "." + FOLD_CLASS + "[" + FOLD_ATTR + '="on"]{max-height:var(--md-plus-fold-max-height);overflow:clip}',
       "." + FOLD_BTN_CLASS + "{display:block;white-space:nowrap;margin:8px auto 0;padding:4px 12px;border:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 22%));border-radius:999px;background:var(--dsw-alias-bg-base,#fff);color:var(--dsw-alias-label-primary);font:12px/18px var(--dsw-font-family-sans,system-ui,sans-serif);cursor:pointer;box-shadow:0 2px 8px rgb(0 0 0 / 12%);z-index:2}",
-      "." + FOLD_CLASS + "[" + FOLD_ATTR + '="on"] .' + FOLD_BTN_CLASS + "{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);margin:0}",
+      "." + FOLD_CLASS + "[" + FOLD_ATTR + '="on"] .' + FOLD_BTN_CLASS + "{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);margin:0}",
 
       // ── 图片点击放大 ────────────────────────────────────────────────
       '[class*="_markdown_"] img{cursor:zoom-in}',
@@ -508,7 +508,9 @@ window.__ModuleLoader__.load({
       TABLE + ".md-table-wide > table{width:100%;max-width:none;min-width:max-content}",
       // 折叠态保留横向滚动，但纵向必须 clip；横向滚动容器只有在
       // overscroll-behavior:auto 时才会把纵向滚轮交还给页面。
-      TABLE + "." + FOLD_CLASS + "[" + FOLD_ATTR + '="on"]{overflow-x:auto;overflow-y:clip}',
+      // 这里同时写明 min/max-height：基础表格规则的 max-height 特异性更高，不补会压过设置值；
+      // 最小高度保证极低阈值下「展开」按钮仍完整可见。
+      TABLE + "." + FOLD_CLASS + "[" + FOLD_ATTR + '="on"]{min-height:48px;max-height:var(--md-plus-fold-max-height);overflow-x:auto;overflow-y:clip}',
     ].join("\n");
 
     var scripts = new Map();
@@ -1239,6 +1241,7 @@ window.__ModuleLoader__.load({
         target.setAttribute(FOLD_ATTR, "on");
         target.classList.add(FOLD_CLASS);
         target.style.setProperty("--md-plus-fold-max-height", limit + "px");
+        if (target.hasAttribute(TABLE_DONE_ATTR)) target.scrollTop = 0;
         var button = document.createElement("button");
         button.type = "button";
         button.className = FOLD_BTN_CLASS;
@@ -1258,6 +1261,7 @@ window.__ModuleLoader__.load({
         button.addEventListener("click", () => {
           var folded = target.getAttribute(FOLD_ATTR) === "on";
           target.setAttribute(FOLD_ATTR, folded ? "off" : "on");
+          if (target.hasAttribute(TABLE_DONE_ATTR)) target.scrollTop = 0;
           button.textContent = folded ? t("foldClose") : t("foldOpen");
           button.setAttribute("aria-expanded", folded ? "true" : "false");
           sync?.();

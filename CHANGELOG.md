@@ -1,6 +1,10 @@
 # 更新日志
 
-## 0.4.3 —— 未发布
+## 0.4.4 —— 未发布
+
+- 修复表格折叠按钮在低阈值和展开/收起后漂移、消失的问题：补齐表格折叠高度规则、重置滚动位置，并给按钮阴影留出空间。
+
+## 0.4.3 —— 2026-10-30
 
 - 修复补高亮语言映射：`hbs` / `jade` / `tscn` / `tres` 分别使用 handlebars / pug / gdresource 语法着色。
 - 修复 Mermaid 12.1 在占位标签兜底路径下的图种识别：补充 `radar-beta`、`treemap-beta`、`venn-beta`、`ishikawa-beta`、`wardley-beta`、`cynefin-beta`、`treeView-beta`、`flowchart-elk` 等，并去掉无效裸关键字的误判。

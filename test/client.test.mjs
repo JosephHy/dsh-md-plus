@@ -497,6 +497,7 @@ test("长表格超过阈值时出现展开按钮", async () => {
   Object.defineProperty(table, "scrollHeight", { value: 900, configurable: true });
   Object.defineProperty(table, "clientWidth", { value: 600, configurable: true });
   Object.defineProperty(table, "scrollLeft", { value: 0, writable: true, configurable: true });
+  Object.defineProperty(table, "scrollTop", { value: 0, writable: true, configurable: true });
   await settle();
 
   assert.equal(table.getAttribute("data-md-plus-fold"), "on");
@@ -506,6 +507,10 @@ test("长表格超过阈值时出现展开按钮", async () => {
   table.scrollLeft = 200;
   table.dispatchEvent(new window.Event("scroll"));
   assert.equal(toggle.style.left, "500px", "横向滚动后按钮仍应跟随可视区域中心");
+
+  table.scrollTop = 180;
+  toggle.dispatchEvent(new window.Event("click"));
+  assert.equal(table.scrollTop, 0, "展开 / 收起切换后应回到表格顶部，按钮不会离开可视区域");
 });
 
 test("缩到最小后再点缩小不越界", async () => {
@@ -905,8 +910,8 @@ test("表格和折叠内容不建立吞滚轮的滚动容器", async () => {
   );
   assert.match(
     css,
-    /div:has\(> table\)\.md-plus-fold\[data-md-plus-fold="on"\]\{overflow-x:auto;overflow-y:clip\}/,
-    "折叠宽表要保留横向滚动，同时纵向用 clip 避免吞滚轮",
+    /div:has\(> table\)\.md-plus-fold\[data-md-plus-fold="on"\]\{min-height:48px;max-height:var\(--md-plus-fold-max-height\);overflow-x:auto;overflow-y:clip\}/,
+    "折叠宽表要使用设置的高度，同时保留横向滚动、纵向用 clip 避免吞滚轮",
   );
   assert.match(
     css,
@@ -922,6 +927,11 @@ test("表格和折叠内容不建立吞滚轮的滚动容器", async () => {
     css,
     /\.md-plus-fold-toggle\{[^}]*white-space:nowrap/,
     "折叠按钮不能换行，避免横向滚动时按钮自身变形",
+  );
+  assert.match(
+    css,
+    /\.md-plus-fold\[data-md-plus-fold="on"\] \.md-plus-fold-toggle\{[^}]*bottom:12px/,
+    "折叠按钮要留出阴影空间，避免贴底被裁切",
   );
 });
 
