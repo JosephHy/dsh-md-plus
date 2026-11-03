@@ -7,7 +7,13 @@
 - 降低长会话内存：高亮去重键从 DOM 属性改为 WeakMap，避免完整源码复制进页面属性；定期清理已脱离文档的插件按钮。
 - 工程化：`npm run check` 先构建再测试；补声明 `@shikijs/langs` 直接依赖；`publishConfig` 固定 npmjs registry；预览和展示脚本从 `package.json` 读取版本。
 - 新增维护者发版脚本：自动修改 CHANGELOG 发布日期、提交、打 tag、推送代码和 tag，支持 `npm run release:dry` 预览。
-- 测试补到 80 条，补强设置保存不重置折叠、只改字号不重绘 Mermaid、流式输出不插按钮、源码不复制进属性等回归用例。
+- 修复 Mermaid「下载 PNG」不可用：Mermaid 改用 SVG 文本标签，避免 `foreignObject` 污染 canvas；导出失败时按钮会给出提示；新增 `npm run smoke` 真实浏览器验证。
+- 修复折叠表格的 resize 监听泄漏和侧栏宽度变化时按钮偏位：表格卸载时自动清理监听，按钮位置改用 `ResizeObserver` 跟随。
+- 修复合法 Mermaid 图的节点标签包含「Syntax error in text」时被误判为渲染失败。
+- 修复表格复制按钮的反馈文案显示到另一颗按钮、剪贴板 API 被拒时没有 textarea 兜底；设置面板和图片预览打开时锁定背景滚动并约束键盘焦点；离开 Markdown 页面时移除设置齿轮。
+- 修复 localStorage 读成功但写入失败时 Mermaid 配色只在存储里变化、当前会话不生效的问题。
+- README 预览图改用 GitHub Pages 绝对地址，npm 包页面也能正常显示。
+- 测试补到 85 条，补强设置保存不重置折叠、只改字号不重绘 Mermaid、流式输出不插按钮、源码不复制进属性、剪贴板降级、弹层滚动和主题存储等回归用例。
 
 ## 0.4.4 —— 2026-11-01
 

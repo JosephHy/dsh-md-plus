@@ -3,6 +3,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { Window } from "happy-dom";
+import { buildConfig } from "../src/mermaid-theme.js";
 
 const DEBOUNCE_MS = 160;
 const RUNTIME_URL = "/dsh-md-plus/highlight-runtime.js";
@@ -1264,6 +1265,107 @@ test("英文界面下按钮文案切换", async () => {
     assert.equal(block.querySelector(".md-plus-tool").title, "No wrap (horizontal scroll)");
   } finally {
     document.documentElement.lang = "zh-CN";
+  }
+});
+
+test("Mermaid 配置使用 SVG 文本标签，避免 PNG 被 foreignObject 污染", () => {
+  const config = buildConfig(false, "sans-serif", "blue");
+  assert.equal(config.htmlLabels, false, "HTML 标签会生成 foreignObject，canvas 导出 PNG 会被判为污染");
+});
+
+test("Clipboard 写入被拒时回退到 textarea", async () => {
+  mount();
+  const clipboardDescriptor = Object.getOwnPropertyDescriptor(window.navigator, "clipboard");
+  const copied = [];
+  Object.defineProperty(window.navigator, "clipboard", {
+    configurable: true,
+    value: {
+      writeText: async () => {
+        throw new Error("permission denied");
+      },
+    },
+  });
+  const previousExecCommand = document.execCommand;
+  document.execCommand = (command) => {
+    if (command === "copy") copied.push(document.querySelector("textarea")?.value ?? "");
+    return true;
+  };
+  try {
+    document.body.innerHTML = tableHtml();
+    await settle();
+    const button = document.querySelector("#copy-table > table > .md-plus-table-tools button");
+    button.dispatchEvent(new window.Event("click"));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(copied.at(-1), "名称,数量\n苹果,2\n\"香蕉, 大\",3", "Clipboard 被拒后应走 textarea 兜底");
+    assert.equal(button.textContent, "已复制");
+  } finally {
+    document.execCommand = previousExecCommand;
+    if (clipboardDescriptor === undefined) delete window.navigator.clipboard;
+    else Object.defineProperty(window.navigator, "clipboard", clipboardDescriptor);
+  }
+});
+
+test("设置面板和图片预览会锁定背景滚动", async () => {
+  mount();
+  document.body.innerHTML =
+    '<div class="_markdown_x"><p><img src="http://127.0.0.1:43120/pic.png" alt="截图"></p></div>';
+  await settle();
+
+  document.querySelector("img").dispatchEvent(new window.Event("click", { bubbles: true }));
+  assert.equal(document.documentElement.style.overflow, "hidden", "图片预览打开时背景不能滚");
+  document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  assert.equal(document.documentElement.style.overflow, "", "关闭图片预览后恢复页面滚动");
+
+  document.querySelector(".md-plus-settings-btn").dispatchEvent(new window.Event("click"));
+  assert.equal(document.documentElement.style.overflow, "hidden", "设置面板打开时背景不能滚");
+  document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  assert.equal(document.documentElement.style.overflow, "", "关闭设置面板后恢复页面滚动");
+});
+
+test("离开 Markdown 页面后设置齿轮会被移除", async () => {
+  mount();
+  document.body.innerHTML = codeBlockHtml("dart", "int a = 1;");
+  await settle();
+  assert.ok(document.querySelector(".md-plus-settings-btn"), "Markdown 页面要有设置入口");
+
+  document.body.innerHTML = '<div class="_settings_x">设置</div>';
+  await settle();
+  assert.equal(document.querySelector(".md-plus-settings-btn"), null, "离开 Markdown 页面后齿轮不能残留");
+});
+
+test("localStorage 读成功写失败时 Mermaid 配色仍在当前会话生效", async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(window, "localStorage");
+  const store = new Map([["dsh-md-plus-mermaid-theme", "blue"]]);
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: {
+      getItem(key) {
+        return store.has(key) ? store.get(key) : null;
+      },
+      setItem() {
+        throw new Error("quota exceeded");
+      },
+      removeItem(key) {
+        store.delete(key);
+      },
+      clear() {},
+    },
+  });
+  try {
+    mount();
+    document.body.innerHTML = codeBlockHtml("mermaid", "flowchart LR\n A --> B");
+    await settle();
+    const block = document.querySelector(".md-code-block");
+    block.querySelector(".md-plus-theme").dispatchEvent(new window.Event("click"));
+    await settle();
+    assert.equal(
+      window.__DSH_MD_PLUS_MMD__.calls.at(-1).theme,
+      "neutral",
+      "写入失败不能让当前会话继续用旧配色",
+    );
+  } finally {
+    if (descriptor === undefined) delete window.localStorage;
+    else Object.defineProperty(window, "localStorage", descriptor);
   }
 });
 

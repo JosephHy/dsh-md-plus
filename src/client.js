@@ -79,6 +79,7 @@ window.__ModuleLoader__.load({
         fit: "适应整图",
         downloadSvg: "下载 SVG",
         downloadPng: "下载 PNG",
+        exportFailed: "导出失败，请改用 SVG",
         close: "关闭",
         tableCsv: "CSV",
         tableMd: "Markdown",
@@ -132,6 +133,7 @@ window.__ModuleLoader__.load({
         fit: "Fit",
         downloadSvg: "Download SVG",
         downloadPng: "Download PNG",
+        exportFailed: "Export failed; try SVG instead",
         close: "Close",
         tableCsv: "CSV",
         tableMd: "Markdown",
@@ -195,6 +197,7 @@ window.__ModuleLoader__.load({
     var memorySettings = null;
     var memoryTheme = null;
     var settingsCache = null;
+    var themeCache = null;
 
     /** 读本地设置；坏值逐项回退，避免一个字段写坏拖垮全部功能。 */
     function readSettings() {
@@ -519,6 +522,9 @@ window.__ModuleLoader__.load({
     var scripts = new Map();
     var pending = new Set();
     var foldSyncs = new WeakMap();
+    var foldTargets = new Set();
+    var foldResizeObserver = null;
+    var foldResizeHandler = null;
     var diagramKindCache = new WeakMap();
     var cacheKeys = new WeakMap();
     var timer = null;
@@ -743,6 +749,7 @@ window.__ModuleLoader__.load({
       for (const node of injected) {
         if (!node.isConnected) injected.delete(node);
       }
+      cleanupFoldTargets();
       diagramKindCache = new WeakMap();
       if (rescanQueued) {
         rescanQueued = false;
@@ -991,16 +998,22 @@ window.__ModuleLoader__.load({
 
     /** 当前 Mermaid 配色；localStorage 不可用时回退到本次会话缓存。 */
     function getMermaidTheme() {
+      if (themeCache !== null) return themeCache;
       try {
         var saved = window.localStorage.getItem(THEME_KEY);
         if (saved !== null && THEME_ORDER.indexOf(saved) !== -1) {
           memoryTheme = saved;
+          themeCache = saved;
           return saved;
         }
         memoryTheme = null;
       } catch {
-        if (memoryTheme !== null) return memoryTheme;
+        if (memoryTheme !== null) {
+          themeCache = memoryTheme;
+          return memoryTheme;
+        }
       }
+      themeCache = "blue";
       return "blue";
     }
 
@@ -1022,6 +1035,7 @@ window.__ModuleLoader__.load({
       var index = THEME_ORDER.indexOf(current);
       var next = THEME_ORDER[(index + 1) % THEME_ORDER.length];
       memoryTheme = next;
+      themeCache = next;
       try {
         window.localStorage.setItem(THEME_KEY, next);
       } catch {
@@ -1232,13 +1246,68 @@ window.__ModuleLoader__.load({
       var sync = foldSyncs.get(target);
       if (sync !== undefined) {
         target.removeEventListener("scroll", sync);
-        window.removeEventListener("resize", sync);
         foldSyncs.delete(target);
+      }
+      foldTargets.delete(target);
+      if (foldTargets.size === 0) {
+        if (foldResizeObserver !== null) {
+          foldResizeObserver.disconnect();
+          foldResizeObserver = null;
+        }
+        if (foldResizeHandler !== null) {
+          window.removeEventListener("resize", foldResizeHandler);
+          foldResizeHandler = null;
+        }
+      } else if (foldResizeObserver !== null) {
+        foldResizeObserver.unobserve(target);
       }
       target.removeAttribute(FOLD_ATTR);
       target.classList.remove(FOLD_CLASS);
       target.style.removeProperty("--md-plus-fold-max-height");
       target.querySelector("." + FOLD_BTN_CLASS)?.remove();
+    }
+
+    /** 表格宽度变化时重新把折叠按钮放回可视区域中心；侧栏收展不一定触发 window resize。 */
+    function watchFoldTarget(target, sync) {
+      foldSyncs.set(target, sync);
+      foldTargets.add(target);
+      if (typeof window.ResizeObserver === "function") {
+        if (foldResizeObserver === null) {
+          foldResizeObserver = new window.ResizeObserver((entries) => {
+            for (const entry of entries) {
+              var entryTarget = entry.target;
+              var entrySync = foldSyncs.get(entryTarget);
+              if (entrySync === undefined) continue;
+              if (!entryTarget.isConnected) {
+                resetFold(entryTarget);
+                continue;
+              }
+              entrySync();
+            }
+          });
+        }
+        foldResizeObserver.observe(target);
+        return;
+      }
+      if (foldResizeHandler === null) {
+        foldResizeHandler = () => {
+          for (const entryTarget of foldTargets) {
+            if (!entryTarget.isConnected) {
+              resetFold(entryTarget);
+              continue;
+            }
+            foldSyncs.get(entryTarget)?.();
+          }
+        };
+        window.addEventListener("resize", foldResizeHandler);
+      }
+    }
+
+    /** 长表被宿主卸载时不会走 resetFold，扫描一轮把脱离文档的目标收掉。 */
+    function cleanupFoldTargets() {
+      for (const target of foldTargets) {
+        if (!target.isConnected) resetFold(target);
+      }
     }
 
     /**
@@ -1281,9 +1350,8 @@ window.__ModuleLoader__.load({
             }
           : null;
         if (sync !== null) {
-          foldSyncs.set(target, sync);
           target.addEventListener("scroll", sync, { passive: true });
-          window.addEventListener("resize", sync);
+          watchFoldTarget(target, sync);
         }
         button.addEventListener("click", () => {
           var folded = target.getAttribute(FOLD_ATTR) === "on";
@@ -1349,14 +1417,18 @@ window.__ModuleLoader__.load({
       return output.join("\n");
     }
 
-    /** 写剪贴板；老环境没有 Clipboard API 时退回隐藏 textarea。 */
+    /** 写剪贴板；老环境没有 Clipboard API 或权限被拒时退回隐藏 textarea。 */
     async function copyText(text) {
       if (
         window.navigator.clipboard !== undefined &&
         typeof window.navigator.clipboard.writeText === "function"
       ) {
-        await window.navigator.clipboard.writeText(text);
-        return true;
+        try {
+          await window.navigator.clipboard.writeText(text);
+          return true;
+        } catch {
+          /* 权限被拒或非安全上下文时继续走下面的 textarea 兜底 */
+        }
       }
       var area = document.createElement("textarea");
       area.value = text;
@@ -1399,7 +1471,7 @@ window.__ModuleLoader__.load({
         ["csv", t("tableCsv"), "copyCsvTitle", tableToCsv],
         ["md", t("tableMd"), "copyMdTitle", tableToMarkdown],
       ]) {
-        var button = document.createElement("button");
+        const button = document.createElement("button");
         button.type = "button";
         button.textContent = label;
         button.title = t(titleKey);
@@ -1417,6 +1489,54 @@ window.__ModuleLoader__.load({
       }
       tools.appendChild(group);
       dataTable.insertBefore(tools, dataTable.firstChild);
+    }
+
+    // ── 弹层通用：锁背景滚动 + 键盘焦点 ────────────────────────────
+    var scrollLocks = 0;
+    var previousRootOverflow = "";
+
+    function lockPageScroll() {
+      if (scrollLocks === 0) {
+        previousRootOverflow = document.documentElement.style.overflow;
+        document.documentElement.style.overflow = "hidden";
+      }
+      scrollLocks += 1;
+    }
+
+    function unlockPageScroll() {
+      if (scrollLocks === 0) return;
+      scrollLocks -= 1;
+      if (scrollLocks === 0) {
+        document.documentElement.style.overflow = previousRootOverflow;
+        previousRootOverflow = "";
+      }
+    }
+
+    /** 把 Tab 键限制在当前弹层内，返回释放函数。 */
+    function trapFocus(container) {
+      function onKey(event) {
+        if (event.key !== "Tab") return;
+        var candidates = Array.from(
+          container.querySelectorAll(
+            'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          ),
+        ).filter((node) => node.offsetParent !== null || node === document.activeElement);
+        if (candidates.length === 0) {
+          event.preventDefault();
+          return;
+        }
+        var first = candidates[0];
+        var last = candidates[candidates.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+      container.addEventListener("keydown", onKey, true);
+      return () => container.removeEventListener("keydown", onKey, true);
     }
 
     // ── 图片放大 ─────────────────────────────────────────────────────
@@ -1438,12 +1558,15 @@ window.__ModuleLoader__.load({
       closeButton.setAttribute("aria-label", t("imageClose"));
 
       var previousFocus = document.activeElement;
+      var releaseFocus = null;
       var closed = false;
       function closeViewer() {
         if (closed) return;
         closed = true;
+        releaseFocus?.();
         document.removeEventListener("keydown", onKey, true);
         overlay.remove();
+        unlockPageScroll();
         if (previousFocus !== null && typeof previousFocus.focus === "function") previousFocus.focus();
       }
       function onKey(event) {
@@ -1460,7 +1583,9 @@ window.__ModuleLoader__.load({
       document.addEventListener("keydown", onKey, true);
       overlay.appendChild(image);
       overlay.appendChild(closeButton);
+      lockPageScroll();
       document.body.appendChild(overlay);
+      releaseFocus = trapFocus(overlay);
       closeButton.focus();
     }
 
@@ -1611,12 +1736,15 @@ window.__ModuleLoader__.load({
       overlay.appendChild(panel);
 
       var previousFocus = document.activeElement;
+      var releaseFocus = null;
       var closed = false;
       function closeSettings() {
         if (closed) return;
         closed = true;
+        releaseFocus?.();
         document.removeEventListener("keydown", onKey, true);
         overlay.remove();
+        unlockPageScroll();
         if (previousFocus !== null && typeof previousFocus.focus === "function") previousFocus.focus();
       }
       function onKey(event) {
@@ -1660,6 +1788,7 @@ window.__ModuleLoader__.load({
         };
         saveSettings(next);
         memoryTheme = nextTheme;
+        themeCache = nextTheme;
         try {
           window.localStorage.setItem(THEME_KEY, nextTheme);
         } catch {
@@ -1684,14 +1813,20 @@ window.__ModuleLoader__.load({
         if (event.target === overlay) closeSettings();
       });
       document.addEventListener("keydown", onKey, true);
+      lockPageScroll();
       document.body.appendChild(overlay);
+      releaseFocus = trapFocus(overlay);
       saveButton.focus();
     }
 
     function ensureSettingsButton() {
-      if (document.querySelector("." + SETTINGS_BTN_CLASS) !== null) return;
-      // 设置页、登录页没有 Markdown 内容，不往那种页面挂齿轮
-      if (document.querySelector('[class*="_markdown_"], .md-code-block') === null) return;
+      var existing = document.querySelector("." + SETTINGS_BTN_CLASS);
+      // 设置页、登录页没有 Markdown 内容，不往那种页面挂齿轮；离开聊天页时把旧齿轮摘掉
+      if (document.querySelector('[class*="_markdown_"], .md-code-block') === null) {
+        existing?.remove();
+        return;
+      }
+      if (existing !== null) return;
       var button = document.createElement("button");
       button.type = "button";
       button.className = SETTINGS_BTN_CLASS;
@@ -1755,19 +1890,27 @@ window.__ModuleLoader__.load({
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
+    function exportFailed(button, error) {
+      console.warn("[dsh-md-plus] 图表导出失败", error);
+      if (button !== undefined) flashButton(button, t("exportFailed"));
+    }
+
     /** 导出独立 SVG。 */
-    function downloadSvg(svg) {
+    function downloadSvg(svg, button) {
       try {
         downloadBlob(new Blob([serializeSvg(svg)], { type: "image/svg+xml;charset=utf-8" }), "mermaid-diagram.svg");
       } catch (error) {
-        console.warn("[dsh-md-plus] SVG 导出失败", error);
+        exportFailed(button, error);
       }
     }
 
     /** 导出 PNG：用 canvas 把独立 SVG 栅格化，按长边限制 4096px。 */
-    function downloadPng(svg) {
+    function downloadPng(svg, button) {
       var size = svgSize(svg);
-      if (size.width <= 0 || size.height <= 0) return;
+      if (size.width <= 0 || size.height <= 0) {
+        exportFailed(button, new Error("图表尺寸无效"));
+        return;
+      }
       var image = new window.Image();
       var objectUrl = "";
       image.onload = function () {
@@ -1781,16 +1924,17 @@ window.__ModuleLoader__.load({
           context.drawImage(image, 0, 0, canvas.width, canvas.height);
           canvas.toBlob((blob) => {
             if (blob !== null) downloadBlob(blob, "mermaid-diagram.png");
+            else exportFailed(button, new Error("canvas 未生成图片"));
           }, "image/png");
         } catch (error) {
-          console.warn("[dsh-md-plus] PNG 导出失败", error);
+          exportFailed(button, error);
         } finally {
           if (objectUrl !== "") URL.revokeObjectURL(objectUrl);
         }
       };
       image.onerror = function () {
         if (objectUrl !== "") URL.revokeObjectURL(objectUrl);
-        console.warn("[dsh-md-plus] PNG 导出失败：SVG 无法载入");
+        exportFailed(button, new Error("SVG 无法载入"));
       };
       objectUrl = URL.createObjectURL(new Blob([serializeSvg(svg)], { type: "image/svg+xml;charset=utf-8" }));
       image.src = objectUrl;
@@ -1872,15 +2016,16 @@ window.__ModuleLoader__.load({
       overlay.appendChild(panel);
 
       var previousFocus = document.activeElement;
-      var previousOverflow = document.documentElement.style.overflow;
+      var releaseFocus = null;
       var closed = false;
       var reset = () => fitToView(overlay);
       function closeViewer() {
         if (closed) return;
         closed = true;
+        releaseFocus?.();
         document.removeEventListener("keydown", onKey, true);
         overlay.remove();
-        document.documentElement.style.overflow = previousOverflow;
+        unlockPageScroll();
         zooms.delete(overlay);
         if (previousFocus !== null && typeof previousFocus.focus === "function") {
           previousFocus.focus();
@@ -1897,8 +2042,8 @@ window.__ModuleLoader__.load({
         if (event.target === overlay) closeViewer();
       });
       fitButton.addEventListener("click", reset);
-      svgButton.addEventListener("click", () => downloadSvg(svg));
-      pngButton.addEventListener("click", () => downloadPng(svg));
+      svgButton.addEventListener("click", () => downloadSvg(svg, svgButton));
+      pngButton.addEventListener("click", () => downloadPng(svg, pngButton));
       zoomOut.addEventListener("click", () => zoomBy(overlay, 1 / ZOOM_STEP));
       zoomIn.addEventListener("click", () => zoomBy(overlay, ZOOM_STEP));
       closeButton.addEventListener("click", closeViewer);
@@ -1906,8 +2051,9 @@ window.__ModuleLoader__.load({
 
       zooms.set(overlay, { scale: 1, x: 0, y: 0, min: ZOOM_MIN_MODAL });
       bindViewport(overlay, viewport, reset, true);
-      document.documentElement.style.overflow = "hidden";
+      lockPageScroll();
       document.body.appendChild(overlay);
+      releaseFocus = trapFocus(overlay);
       closeButton.focus();
       var schedule = window.requestAnimationFrame ?? ((cb) => window.setTimeout(cb, 0));
       schedule(reset);
@@ -1933,6 +2079,7 @@ window.__ModuleLoader__.load({
       ctx.effect(() => {
         disposed = false;
         settingsCache = null;
+        themeCache = null;
         injectStyle();
         applyCodeFontSize();
         ensureSettingsButton();
@@ -1955,6 +2102,7 @@ window.__ModuleLoader__.load({
           }
           pending.clear();
           rescanQueued = false;
+          for (const target of [...foldTargets]) resetFold(target);
           observer.disconnect();
           document.removeEventListener("click", onDocumentClick, true);
           for (const node of injected) node.remove();
@@ -1987,7 +2135,9 @@ window.__ModuleLoader__.load({
           )) {
             node.remove();
           }
-          document.documentElement.style.overflow = "";
+          scrollLocks = 0;
+          document.documentElement.style.overflow = previousRootOverflow;
+          previousRootOverflow = "";
           document.documentElement.style.removeProperty("--md-plus-code-font-size");
           document.documentElement.style.removeProperty("--md-plus-code-line-height");
           document.querySelector("style[" + STYLE_ATTR + "]")?.remove();
@@ -1996,6 +2146,7 @@ window.__ModuleLoader__.load({
           }
           scripts.clear();
           settingsCache = null;
+          themeCache = null;
           diagramKindCache = new WeakMap();
           cacheKeys = new WeakMap();
           // 不清运行时全局的话，插件重载后 loadScript() 会直接复用旧引擎

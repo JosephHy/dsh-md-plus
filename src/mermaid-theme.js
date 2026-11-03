@@ -155,6 +155,8 @@ export function buildConfig(dark, fontFamily, preset = "blue") {
     startOnLoad: false,
     // 图源是模型写的，按不可信内容处理
     securityLevel: "strict",
+    // HTML 标签会生成 foreignObject，canvas 导出 PNG 时会被判成跨域污染
+    htmlLabels: false,
     theme: "base",
     fontFamily,
     themeVariables: { ...color, ...GEOMETRY },

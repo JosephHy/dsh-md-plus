@@ -37,7 +37,8 @@ function roundNodes(host) {
 
 /** mermaid 画不出来时返回的是这张「Syntax error in text」卡片，不是图。 */
 function isErrorSvg(svg) {
-  return svg.includes('aria-roledescription="error"') || svg.includes("Syntax error in text");
+  // 只认错误卡片自己的标记：合法图的节点标签也可能正好写着这句话
+  return svg.includes('aria-roledescription="error"') || svg.includes('class="error-text"');
 }
 
 /**

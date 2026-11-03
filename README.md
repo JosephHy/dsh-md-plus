@@ -2,7 +2,7 @@
 
 给 DeepSeek Harness Web / Desktop 的 Markdown 阅读增强插件：重做代码块卡片、给 DSH 不认识的语言补语法高亮、自己渲染 mermaid 图形、重做表格样式并支持复制、图片点击放大，以及一个调整显示参数的设置面板。
 
-[![dsh-md-plus 显示效果预览](<docs/preview.png>)](https://josephhy.github.io/dsh-md-plus/docs/showcase/)
+[![dsh-md-plus 显示效果预览](https://josephhy.github.io/dsh-md-plus/docs/preview.png)](https://josephhy.github.io/dsh-md-plus/docs/showcase/)
 
 ## 功能
 
@@ -27,11 +27,12 @@ dsh plugin --profile desktop remove dsh-md-plus
 ```powershell
 npm install       # 顺带跑 prepare → build
 npm run build     # 产出 lib/ 下四个文件
-npm run check     # 构建 + 语法检查 + 80 条测试（check 会先 build）
+npm run check     # 构建 + 语法检查 + 85 条测试（check 会先 build）
 npm run release:dry # 维护者发版：先看 CHANGELOG 日期 + 提交 + tag + push 计划
 npm run release   # 维护者发版：改 CHANGELOG 日期 + 提交 + 打 tag + 推送（tag 会触发 GitHub Actions 自动发 npm）
 npm run preview   # 生成 preview.html（含真渲出来的 mermaid 图）
 npm run shot      # 用 headless Chrome 把 preview.html 截成 docs/preview.png
+npm run smoke     # 用本机 Chrome 验证 Mermaid 渲染和 PNG 导出（Chrome 路径可用 CHROME_PATH 覆盖）
 ```
 
 `npm run preview` / `scripts/showcase.mjs` 需要读取 DSH 安装目录里的主题和前端资源；如果本机 DSH 是 `app.asar` 包，请先解包到目录，并把 `DSH_APP_DIR` 指向该目录。

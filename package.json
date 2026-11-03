@@ -21,8 +21,9 @@
     "prepare": "node scripts/build.mjs",
     "preview": "node scripts/build.mjs && node scripts/preview.mjs && node scripts/shot.mjs",
     "shot": "node scripts/shot.mjs",
+    "smoke": "npm run build && node scripts/smoke.mjs",
     "test": "node --test test/host.test.mjs test/client.test.mjs",
-    "check": "npm run build && node --check src/index.js && node --check src/client.js && node --check src/highlight-runtime.js && node --check src/mermaid-runtime.js && node --check src/mermaid-theme.js && node --check scripts/build.mjs && npm test",
+    "check": "npm run build && node --check src/index.js && node --check src/client.js && node --check src/highlight-runtime.js && node --check src/mermaid-runtime.js && node --check src/mermaid-theme.js && node --check scripts/build.mjs && node --check scripts/smoke.mjs && npm test",
     "release": "node scripts/release.mjs",
     "release:dry": "node scripts/release.mjs --dry-run",
     "release:yes": "node scripts/release.mjs --yes"
