@@ -515,6 +515,30 @@ test("长表格超过阈值时出现展开按钮", async () => {
   assert.equal(table.scrollTop, 0, "展开 / 收起切换后应回到表格顶部，按钮不会离开可视区域");
 });
 
+test("表格展开后的收起按钮横向钉在可视区中间", async () => {
+  mount();
+  document.body.innerHTML =
+    '<div class="_markdown_x"><div id="wide-table"><table><tbody><tr><td>x</td></tr></tbody></table></div></div>';
+  const table = document.querySelector("#wide-table");
+  Object.defineProperty(table, "scrollHeight", { value: 900, configurable: true });
+  Object.defineProperty(table, "clientWidth", { value: 600, configurable: true });
+  Object.defineProperty(table, "scrollLeft", { value: 0, writable: true, configurable: true });
+  Object.defineProperty(table, "scrollTop", { value: 0, writable: true, configurable: true });
+  await settle();
+
+  const toggle = table.querySelector(".md-plus-fold-toggle");
+  toggle.dispatchEvent(new window.Event("click"));
+  assert.equal(table.getAttribute("data-md-plus-fold"), "off");
+  assert.equal(toggle.style.left, "", "展开态不能留折叠态的内联 left，否则会顶掉 sticky 的居中");
+
+  const css = stylesheet();
+  assert.match(
+    css,
+    /div:has\(> table\) \.md-plus-fold-toggle\{position:sticky;left:50%;transform:translateX\(-50%\)\}/,
+    "收起按钮横向要用 sticky 钉在可视区中间，纵向仍留在表尾文档流",
+  );
+});
+
 test("缩到最小后再点缩小不越界", async () => {
   const block = await mermaidBlock();
   block.querySelector(".md-plus-zoom-out").dispatchEvent(new window.Event("click"));
@@ -677,8 +701,11 @@ test("表格作用域限定在 markdown 正文里，不碰设置页的表格", a
   const tableRules = css.split("\n").filter((line) => line.includes("div:has(> table)"));
   assert.ok(tableRules.length >= 6, `应该有若干条表格规则，实际 ${tableRules.length}`);
   for (const rule of tableRules) {
-    assert.ok(rule.startsWith('[class*="_markdown_"]') || rule.startsWith('body[data-ds-dark-theme] [class*="_markdown_"]'),
-      `表格规则必须带 markdown 作用域：${rule}`);
+    assert.ok(
+      rule.startsWith('[class*="_markdown_"]') ||
+        rule.startsWith('body[data-ds-dark-theme] [class*="_markdown_"]'),
+      `表格规则必须带 markdown 作用域：${rule}`,
+    );
   }
 });
 
@@ -1028,23 +1055,26 @@ function stubClipboard() {
   return copied;
 }
 
-test("表格表头吸顶", async () => {
+test("表格默认冻结 1 行表头、不冻结列", async () => {
   mount();
+  document.body.innerHTML = tableHtml();
   await settle();
-  const css = stylesheet();
-  assert.match(
-    css,
-    /div:has\(> table\) > table thead th\{position:sticky;top:0;z-index:1\}/,
-    "表头要 sticky 在滚动容器顶部",
+  const header = document.querySelector("#copy-table > table > thead > tr");
+  assert.ok(header.cells[0].classList.contains("md-plus-freeze-row"), "默认表头行要冻结");
+  assert.equal(
+    header.cells[0].classList.contains("md-plus-freeze-col"),
+    false,
+    "默认不冻结第一列",
   );
+  assert.match(stylesheet(), /md-plus-freeze-row\{position:sticky/, "冻结行要有 sticky 样式");
   assert.doesNotMatch(
-    css,
+    stylesheet(),
     /div:has\(> table\) > table\{[^}]*overflow:hidden/,
     "表格自身不能 overflow:hidden，否则 sticky 没有可用的滚动祖先",
   );
 });
 
-test("表格复制 CSV / Markdown", async () => {
+test("表格复制 CSV / TSV / Markdown / 富文本", async () => {
   mount();
   const copied = stubClipboard();
   document.body.innerHTML = tableHtml();
@@ -1054,18 +1084,27 @@ test("表格复制 CSV / Markdown", async () => {
   assert.ok(tools, "表格要挂出复制按钮");
   assert.ok(tools.querySelector("span"), "复制按钮要放在独立定位组里");
   const buttons = [...tools.querySelectorAll("button")];
-  assert.deepEqual(buttons.map((b) => b.textContent), ["CSV", "Markdown"]);
+  assert.deepEqual(buttons.map((b) => b.textContent), ["CSV", "TSV", "Markdown", "富文本"]);
+  const byLabel = Object.fromEntries(buttons.map((button) => [button.textContent, button]));
 
-  buttons[0].dispatchEvent(new window.Event("click"));
+  byLabel.CSV.dispatchEvent(new window.Event("click"));
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(copied.at(-1), "名称,数量\n苹果,2\n\"香蕉, 大\",3");
 
-  buttons[1].dispatchEvent(new window.Event("click"));
+  byLabel.TSV.dispatchEvent(new window.Event("click"));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(copied.at(-1), "名称\t数量\n苹果\t2\n香蕉, 大\t3");
+
+  byLabel.Markdown.dispatchEvent(new window.Event("click"));
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(
     copied.at(-1),
     "| 名称 | 数量 |\n| --- | --- |\n| 苹果 | 2 |\n| 香蕉, 大 | 3 |",
   );
+
+  byLabel.富文本.dispatchEvent(new window.Event("click"));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(copied.at(-1), "名称\t数量\n苹果\t2\n香蕉, 大\t3", "没有富文本剪贴板时退回 TSV");
 });
 
 test("点开 Markdown 图片放大，Esc 关闭", async () => {
@@ -1125,7 +1164,9 @@ test("设置面板保存字号、折叠阈值、配色和默认视图", async ()
   const modal = document.querySelector(".md-plus-settings-modal");
   assert.ok(modal, "点设置要打开面板");
 
-  const foldHints = [...modal.querySelectorAll(".md-plus-settings-modal-label-hint")];
+  const foldHints = [...modal.querySelectorAll(".md-plus-settings-modal-label-hint")].filter((hint) =>
+    hint.textContent.includes("折叠"),
+  );
   assert.deepEqual(
     foldHints.map((hint) => hint.textContent),
     ["内容高度超过此值后折叠", "表格高度超过此值后折叠", "图形高度超过此值后折叠"],
@@ -1145,23 +1186,106 @@ test("设置面板保存字号、折叠阈值、配色和默认视图", async ()
     "保存按钮要用主按钮前景色",
   );
 
-  const [font, foldCode, foldTable, foldDiagram] = modal.querySelectorAll("input");
+  const [font, foldCode, foldTable, foldDiagram, freezeRows, freezeCols] =
+    modal.querySelectorAll("input");
   font.value = "15";
   foldCode.value = "600";
   foldTable.value = "700";
   foldDiagram.value = "800";
+  freezeRows.value = "2";
+  freezeCols.value = "1";
   modal.querySelector("select").value = "forest";
   modal.querySelectorAll("select")[1].value = "code";
   modal.querySelector(".md-plus-settings-modal-primary").dispatchEvent(new window.Event("click"));
 
   assert.equal(
     window.localStorage.getItem("dsh-md-plus-settings"),
-    JSON.stringify({ codeFontSize: 15, diagramView: "code", foldCode: 600, foldTable: 700, foldDiagram: 800 }),
+    JSON.stringify({
+      codeFontSize: 15,
+      diagramView: "code",
+      foldCode: 600,
+      foldTable: 700,
+      foldDiagram: 800,
+      freezeRows: 2,
+      freezeCols: 1,
+    }),
   );
   assert.equal(window.localStorage.getItem("dsh-md-plus-mermaid-theme"), "forest");
   assert.equal(document.documentElement.style.getPropertyValue("--md-plus-code-font-size"), "15px");
   assert.equal(document.documentElement.style.getPropertyValue("--md-plus-code-line-height"), "24px");
   assert.equal(tagOf(document.querySelector(".md-plus-settings-modal")), "null", "保存后要关闭面板");
+});
+
+test("表格冻结行列可设置，首列默认不冻结", async () => {
+  mount();
+  document.body.innerHTML =
+    '<div class="_markdown_x"><div class="md-table-wide" id="wide-table"><table>' +
+    "<thead><tr><th>名称</th><th>数量</th><th>备注</th><th>状态</th></tr></thead>" +
+    "<tbody><tr><td>苹果</td><td>2</td><td>新鲜</td><td>有货</td></tr></tbody></table></div></div>";
+  await settle();
+
+  const table = document.querySelector("#wide-table");
+  const headerCell = table.querySelector("thead th");
+  assert.ok(headerCell.classList.contains("md-plus-freeze-row"), "默认冻结 1 行表头");
+  assert.equal(headerCell.classList.contains("md-plus-freeze-col"), false, "默认不冻结首列");
+
+  document.querySelector(".md-plus-settings-btn").dispatchEvent(new window.Event("click"));
+  const modal = document.querySelector(".md-plus-settings-modal");
+  const inputs = modal.querySelectorAll("input");
+  assert.equal(inputs[4].value, "1", "冻结行数默认 1");
+  assert.equal(inputs[5].value, "", "冻结列数默认 0");
+  inputs[5].value = "1";
+  modal.querySelector(".md-plus-settings-modal-primary").dispatchEvent(new window.Event("click"));
+
+  assert.equal(
+    headerCell.classList.contains("md-plus-freeze-col"),
+    true,
+    "保存后首列应进入冻结状态",
+  );
+  assert.equal(
+    window.localStorage.getItem("dsh-md-plus-settings"),
+    JSON.stringify({
+      codeFontSize: 0,
+      diagramView: "diagram",
+      foldCode: 480,
+      foldTable: 520,
+      foldDiagram: 720,
+      freezeRows: 1,
+      freezeCols: 1,
+    }),
+  );
+});
+
+test("设置面板可以全部展开 / 全部收起折叠内容", async () => {
+  mount();
+  document.body.innerHTML =
+    codeBlockHtml("bash", "echo hello\n".repeat(80)) +
+    '<div class="_markdown_x"><div id="fold-table"><table><tbody><tr><td>x</td></tr></tbody></table></div></div>';
+  const content = document.querySelector("[data-code-block-content]");
+  const table = document.querySelector("#fold-table");
+  Object.defineProperty(content, "scrollHeight", { value: 900, configurable: true });
+  Object.defineProperty(table, "scrollHeight", { value: 900, configurable: true });
+  Object.defineProperty(table, "clientWidth", { value: 600, configurable: true });
+  Object.defineProperty(table, "scrollLeft", { value: 0, writable: true, configurable: true });
+  Object.defineProperty(table, "scrollTop", { value: 0, writable: true, configurable: true });
+  await settle();
+
+  assert.equal(content.getAttribute("data-md-plus-fold"), "on");
+  assert.equal(table.getAttribute("data-md-plus-fold"), "on");
+
+  document.querySelector(".md-plus-settings-btn").dispatchEvent(new window.Event("click"));
+  const modal = document.querySelector(".md-plus-settings-modal");
+  const foldActions = [...modal.querySelectorAll(".md-plus-settings-modal-fold-actions button")];
+  assert.deepEqual(foldActions.map((button) => button.textContent), ["全部展开", "全部收起"]);
+
+  foldActions[0].dispatchEvent(new window.Event("click"));
+  assert.equal(content.getAttribute("data-md-plus-fold"), "off", "全部展开后代码块应为展开状态");
+  assert.equal(table.getAttribute("data-md-plus-fold"), "off", "全部展开后表格应为展开状态");
+  assert.equal(content.querySelector(".md-plus-fold-toggle").textContent, "收起");
+
+  foldActions[1].dispatchEvent(new window.Event("click"));
+  assert.equal(content.getAttribute("data-md-plus-fold"), "on", "全部收起后代码块应为折叠状态");
+  assert.equal(table.getAttribute("data-md-plus-fold"), "on", "全部收起后表格应为折叠状态");
 });
 
 test("保存无关设置不重置已展开的长代码块", async () => {
@@ -1221,7 +1345,15 @@ test("设置面板恢复默认会写回默认折叠阈值", async () => {
   actions[2].dispatchEvent(new window.Event("click"));
   assert.equal(
     window.localStorage.getItem("dsh-md-plus-settings"),
-    JSON.stringify({ codeFontSize: 0, diagramView: "diagram", foldCode: 480, foldTable: 520, foldDiagram: 720 }),
+    JSON.stringify({
+      codeFontSize: 0,
+      diagramView: "diagram",
+      foldCode: 480,
+      foldTable: 520,
+      foldDiagram: 720,
+      freezeRows: 1,
+      freezeCols: 0,
+    }),
   );
 });
 
