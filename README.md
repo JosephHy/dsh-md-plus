@@ -27,7 +27,9 @@ dsh plugin --profile desktop remove dsh-md-plus
 ```powershell
 npm install       # 顺带跑 prepare → build
 npm run build     # 产出 lib/ 下四个文件
-npm run check     # 语法检查 + 78 条测试（先 build 再跑，check 不含 build）
+npm run check     # 构建 + 语法检查 + 80 条测试（check 会先 build）
+npm run release:dry # 维护者发版：先看 CHANGELOG 日期 + 提交 + tag + push 计划
+npm run release   # 维护者发版：改 CHANGELOG 日期 + 提交 + 打 tag + 推送（tag 会触发 GitHub Actions 自动发 npm）
 npm run preview   # 生成 preview.html（含真渲出来的 mermaid 图）
 npm run shot      # 用 headless Chrome 把 preview.html 截成 docs/preview.png
 ```

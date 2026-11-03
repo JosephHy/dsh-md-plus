@@ -127,6 +127,7 @@ test("给 DSH 不认识的语言补上高亮", async () => {
   assert.ok(pre.classList.contains("md-plus-pre"));
   assert.match(pre.outerHTML, /--shiki-token-comment/, "注释要走 DSH 的 shiki 变量");
   assert.equal(block.getAttribute("data-md-plus"), "done");
+  assert.equal(block.hasAttribute("data-md-plus-key"), false, "源码不该复制进 DOM 属性");
 });
 
 test("占位标签下从 React fiber 取真实语言并补高亮", async () => {
@@ -799,11 +800,13 @@ test("流式输出期间不动手，定稿后补上", async () => {
     '<div data-streaming="true">' + codeBlockHtml("gdscript", "var a = [") + "</div>";
   await settle();
   assert.equal(tagOf(document.querySelector(".md-plus-hl")), "null", "流式中不该插入");
+  assert.equal(document.querySelectorAll(".md-plus-tool").length, 0, "流式中也不该插按钮");
 
   // 流式结束：DSH 会摘掉 data-streaming
   document.querySelector("[data-streaming]").removeAttribute("data-streaming");
   await settle();
   assert.ok(document.querySelector(".md-plus-hl"), "定稿后应该补上高亮");
+  assert.ok(document.querySelector(".md-plus-tool"), "定稿后按钮也要补上");
 });
 
 test("源码变了会重新上色", async () => {
@@ -1158,6 +1161,45 @@ test("设置面板保存字号、折叠阈值、配色和默认视图", async ()
   assert.equal(document.documentElement.style.getPropertyValue("--md-plus-code-font-size"), "15px");
   assert.equal(document.documentElement.style.getPropertyValue("--md-plus-code-line-height"), "24px");
   assert.equal(tagOf(document.querySelector(".md-plus-settings-modal")), "null", "保存后要关闭面板");
+});
+
+test("保存无关设置不重置已展开的长代码块", async () => {
+  mount();
+  document.body.innerHTML = codeBlockHtml("dart", "int a = 1;\n".repeat(100));
+  const content = document.querySelector("[data-code-block-content]");
+  Object.defineProperty(content, "scrollHeight", { value: 900, configurable: true });
+  await settle();
+
+  const toggle = content.querySelector(".md-plus-fold-toggle");
+  assert.ok(toggle, "前置：长代码块应先折叠");
+  toggle.dispatchEvent(new window.Event("click"));
+  assert.equal(content.getAttribute("data-md-plus-fold"), "off", "前置：点击后应展开");
+
+  document.querySelector(".md-plus-settings-btn").dispatchEvent(new window.Event("click"));
+  const modal = document.querySelector(".md-plus-settings-modal");
+  modal.querySelectorAll("input")[0].value = "15";
+  modal.querySelector(".md-plus-settings-modal-primary").dispatchEvent(new window.Event("click"));
+  await settle();
+
+  assert.equal(content.getAttribute("data-md-plus-fold"), "off", "保存字号不应把已展开的代码块重新折叠");
+  assert.equal(content.querySelector(".md-plus-fold-toggle").textContent, "收起");
+});
+
+test("只改字号保存不重绘 Mermaid 图", async () => {
+  mount();
+  window.__DSH_MD_PLUS_MMD__.calls.length = 0;
+  document.body.innerHTML = codeBlockHtml("mermaid", "flowchart LR\n A --> B");
+  await settle();
+  const before = window.__DSH_MD_PLUS_MMD__.calls.length;
+  assert.ok(before >= 1, "前置：Mermaid 图应已渲染");
+
+  document.querySelector(".md-plus-settings-btn").dispatchEvent(new window.Event("click"));
+  const modal = document.querySelector(".md-plus-settings-modal");
+  modal.querySelectorAll("input")[0].value = "16";
+  modal.querySelector(".md-plus-settings-modal-primary").dispatchEvent(new window.Event("click"));
+  await settle();
+
+  assert.equal(window.__DSH_MD_PLUS_MMD__.calls.length, before, "只改字号不该重绘 Mermaid");
 });
 
 test("设置面板恢复默认会写回默认折叠阈值", async () => {

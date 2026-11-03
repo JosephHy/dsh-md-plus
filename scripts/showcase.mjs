@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const PKG = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
 
 const APP = [
   process.env.DSH_APP_DIR,
@@ -114,7 +115,7 @@ function section(id, number, title, desc, body) {
 const JSON_CODE = [
   "{",
   '  "name": "dsh-md-plus",',
-  '  "version": "0.4.4",',
+  `  "version": "${PKG.version}",`,
   '  "engines": { "node": ">=22.19.0" },',
   '  "features": ["code", "mermaid", "table", "image", "settings"]',
   "}",

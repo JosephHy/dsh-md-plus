@@ -16,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Window } from "happy-dom";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const PKG = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
 const DEBOUNCE_MS = 160;
 const CHROME = process.env.CHROME_PATH ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 
@@ -134,7 +135,7 @@ function block(label, code, bodyHtml) {
 const JSON_CODE = [
   "{",
   '  "name": "dsh-md-plus",',
-  '  "version": "0.4.4",',
+  `  "version": "${PKG.version}",`,
   '  "engines": { "node": ">=22.19.0" }',
   "}",
 ].join("\n");

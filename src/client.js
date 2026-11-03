@@ -168,7 +168,6 @@ window.__ModuleLoader__.load({
     }
     var MODAL_CLASS = "md-plus-mmd-modal";
     var DONE_ATTR = "data-md-plus";
-    var KEY_ATTR = "data-md-plus-key";
     var WRAP_ATTR = "data-md-plus-wrap";
     var MMD_ATTR = "data-md-plus-mmd";
     var FOLD_ATTR = "data-md-plus-fold";
@@ -195,9 +194,11 @@ window.__ModuleLoader__.load({
     var DEBOUNCE_MS = 160;
     var memorySettings = null;
     var memoryTheme = null;
+    var settingsCache = null;
 
     /** 读本地设置；坏值逐项回退，避免一个字段写坏拖垮全部功能。 */
     function readSettings() {
+      if (settingsCache !== null) return { ...settingsCache };
       var settings = { ...DEFAULT_SETTINGS };
       try {
         var raw = window.localStorage.getItem(SETTINGS_KEY);
@@ -215,13 +216,15 @@ window.__ModuleLoader__.load({
         }
         memorySettings = { ...settings };
       } catch {
-        if (memorySettings !== null) return { ...DEFAULT_SETTINGS, ...memorySettings };
+        if (memorySettings !== null) settings = { ...DEFAULT_SETTINGS, ...memorySettings };
       }
-      return settings;
+      settingsCache = { ...settings };
+      return { ...settingsCache };
     }
 
     function saveSettings(next) {
       memorySettings = { ...next };
+      settingsCache = { ...next };
       try {
         window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
       } catch {
@@ -516,6 +519,8 @@ window.__ModuleLoader__.load({
     var scripts = new Map();
     var pending = new Set();
     var foldSyncs = new WeakMap();
+    var diagramKindCache = new WeakMap();
+    var cacheKeys = new WeakMap();
     var timer = null;
     var rescanQueued = false;
     var injected = new Set();
@@ -674,13 +679,21 @@ window.__ModuleLoader__.load({
      * 这块是不是 mermaid 图形。围栏名认得最可靠；标签被宿主换成占位文案时，
      * 退回正文嗅探（见 MMD_FLOW 那段注释）。
      */
-    function diagramKind(block) {
+    function computeDiagramKind(block) {
       var lang = readLang(block);
       if (MMD_LANGS.has(lang)) return "diagram";
       if (lang !== "") return null;
       var pre = block.querySelector(CONTENT + " pre");
       if (pre === null) return null;
       return sniffDiagramType(pre.textContent ?? "") === null ? null : "diagram";
+    }
+
+    /** 同一轮扫描里 decorate 和 scanFolds 会各问一次，缓存到本轮结束就好。 */
+    function diagramKind(block) {
+      if (diagramKindCache.has(block)) return diagramKindCache.get(block);
+      var kind = computeDiagramKind(block);
+      diagramKindCache.set(block, kind);
+      return kind;
     }
 
     /** 这块 DOM 是不是插件自己插的（用来忽略自己触发的变更）。 */
@@ -701,11 +714,19 @@ window.__ModuleLoader__.load({
             ", ." +
             IMG_MODAL_CLASS +
             ", ." +
+            MODAL_CLASS +
+            ", ." +
             SETTINGS_BTN_CLASS +
             ", ." +
             SETTINGS_MODAL_CLASS,
         ) != null
       );
+    }
+
+    /** 流式消息里的代码每帧都在变，定稿前不值得反复扫描；结束时会再扫一次。 */
+    function closestStreaming(node) {
+      var element = node?.nodeType === 1 ? node : node?.parentElement;
+      return element?.closest?.("[data-streaming]") ?? null;
     }
 
     function schedule(block) {
@@ -719,6 +740,10 @@ window.__ModuleLoader__.load({
     function flush() {
       timer = null;
       if (disposed) return;
+      for (const node of injected) {
+        if (!node.isConnected) injected.delete(node);
+      }
+      diagramKindCache = new WeakMap();
       if (rescanQueued) {
         rescanQueued = false;
         for (const block of document.querySelectorAll(BLOCK)) pending.add(block);
@@ -726,6 +751,7 @@ window.__ModuleLoader__.load({
       var batch = Array.from(pending);
       pending.clear();
       for (const block of batch) {
+        if (closestStreaming(block) !== null) continue;
         decorate(block);
         void enhance(block);
       }
@@ -741,6 +767,7 @@ window.__ModuleLoader__.load({
           redrawDiagrams();
           return;
         }
+        if (closestStreaming(record.target) !== null) continue;
         if (isOurs(record.target)) continue;
         var added = record.addedNodes;
         var oursOnly = added.length > 0;
@@ -758,7 +785,7 @@ window.__ModuleLoader__.load({
     function redrawDiagrams() {
       for (const block of document.querySelectorAll("[" + MMD_ATTR + "]")) {
         if (block.getAttribute(MMD_ATTR) === "failed") continue;
-        block.removeAttribute(KEY_ATTR);
+        cacheKeys.delete(block);
         pending.add(block);
       }
       schedule();
@@ -813,7 +840,7 @@ window.__ModuleLoader__.load({
         titleKey: "retry",
         ariaKey: "retryAria",
         run: (block) => {
-          block.removeAttribute(KEY_ATTR);
+          cacheKeys.delete(block);
           block.removeAttribute(MMD_ATTR);
           block.querySelector("." + MMD_CLASS + "-error")?.remove();
           void enhance(block);
@@ -895,7 +922,7 @@ window.__ModuleLoader__.load({
       // md-plus-pre 是我们插的，没有它才是 DSH 自己渲出来的
       if (content.querySelector("pre.shiki:not(.md-plus-pre)") === null) return false;
       host.remove();
-      block.removeAttribute(KEY_ATTR);
+      cacheKeys.delete(block);
       block.removeAttribute(DONE_ATTR);
       return true;
     }
@@ -903,7 +930,7 @@ window.__ModuleLoader__.load({
     async function enhance(block) {
       if (!block.isConnected) return;
       // 流式输出期间源码每帧都在变，等它定稿再处理（data-streaming 消失时会重新扫描）
-      if (block.closest("[data-streaming]") !== null) return;
+      if (closestStreaming(block) !== null) return;
       var content = block.querySelector(CONTENT);
       if (content === null) return;
       if (releaseTakenOver(block, content)) return;
@@ -929,7 +956,7 @@ window.__ModuleLoader__.load({
       if (code.trim() === "") return;
       // 已经处理过同一份内容就不再动它
       var key = lang + "\u0000" + code;
-      if (block.getAttribute(KEY_ATTR) === key) return;
+      if (cacheKeys.get(block) === key) return;
 
       var html;
       try {
@@ -957,7 +984,7 @@ window.__ModuleLoader__.load({
       content.querySelector("." + HOST_CLASS)?.remove();
       resetFold(content);
       pre.after(host);
-      block.setAttribute(KEY_ATTR, key);
+      cacheKeys.set(block, key);
       block.setAttribute(DONE_ATTR, "done");
       scheduleFold(content, foldLimit("code"));
     }
@@ -1008,7 +1035,7 @@ window.__ModuleLoader__.load({
       var code = (pre.textContent ?? "").trim();
       if (code === "") return;
       var key = "mmd\u0000" + code;
-      if (block.getAttribute(KEY_ATTR) === key) return;
+      if (cacheKeys.get(block) === key) return;
 
       var api = await loadScript(MMD_URL, MMD_GLOBAL);
       if (disposed || api === null) return;
@@ -1052,7 +1079,7 @@ window.__ModuleLoader__.load({
       if (viewport !== null) bindViewport(block, viewport);
       pre.before(host);
       content.querySelector("." + MMD_CLASS + "-error")?.remove();
-      block.setAttribute(KEY_ATTR, key);
+      cacheKeys.set(block, key);
       // 用户手动切过视图就尊重当前选择；首次渲染用设置里的默认视图
       var view = block.getAttribute(MMD_ATTR);
       if (view !== "code" && view !== "diagram") block.setAttribute(MMD_ATTR, readSettings().diagramView);
@@ -1233,7 +1260,7 @@ window.__ModuleLoader__.load({
       if (target.getAttribute(FOLD_ATTR) !== null) return;
       var schedule = window.requestAnimationFrame ?? ((cb) => window.setTimeout(cb, 0));
       schedule(() => {
-        if (!target.isConnected || target.getAttribute(FOLD_ATTR) !== null) return;
+        if (disposed || !target.isConnected || target.getAttribute(FOLD_ATTR) !== null) return;
         if (target.scrollHeight <= limit) {
           target.setAttribute(FOLD_ATTR, "none");
           return;
@@ -1273,15 +1300,17 @@ window.__ModuleLoader__.load({
 
     /** 扫一遍代码块和表格，图表在 applyDiagram 里单独处理。 */
     function scanFolds() {
+      var codeLimit = foldLimit("code");
+      var tableLimit = foldLimit("table");
       for (const block of document.querySelectorAll(BLOCK)) {
-        if (block.closest("[data-streaming]") !== null) continue;
+        if (closestStreaming(block) !== null) continue;
         if (diagramKind(block) !== null) continue;
-        scheduleFold(block.querySelector(CONTENT), foldLimit("code"));
+        scheduleFold(block.querySelector(CONTENT), codeLimit);
       }
       for (const table of document.querySelectorAll(TABLE)) {
-        if (table.closest("[data-streaming]") !== null) continue;
+        if (closestStreaming(table) !== null) continue;
         decorateTable(table);
-        scheduleFold(table, foldLimit("table"));
+        scheduleFold(table, tableLimit);
       }
     }
 
@@ -1480,11 +1509,28 @@ window.__ModuleLoader__.load({
       return input;
     }
 
+    /** 重新量折叠高度，但保留用户手动展开的节点，不然保存一次设置就白展开了。 */
     function rescanFolds() {
-      for (const node of document.querySelectorAll("[" + FOLD_ATTR + "]")) resetFold(node);
+      diagramKindCache = new WeakMap();
+      var codeLimit = foldLimit("code");
+      var tableLimit = foldLimit("table");
+      var diagramLimit = foldLimit("diagram");
+      for (const node of document.querySelectorAll("[" + FOLD_ATTR + "]")) {
+        if (node.classList.contains(MMD_CLASS + "-viewport")) continue;
+        var limit = node.hasAttribute(TABLE_DONE_ATTR) ? tableLimit : codeLimit;
+        if (node.getAttribute(FOLD_ATTR) === "off" && limit > 0) {
+          node.style.setProperty("--md-plus-fold-max-height", limit + "px");
+          continue;
+        }
+        resetFold(node);
+      }
       for (const viewport of document.querySelectorAll("." + MMD_CLASS + "-viewport")) {
+        if (viewport.getAttribute(FOLD_ATTR) === "off" && diagramLimit > 0) {
+          viewport.style.setProperty("--md-plus-fold-max-height", diagramLimit + "px");
+          continue;
+        }
         resetFold(viewport);
-        scheduleFold(viewport, foldLimit("diagram"));
+        scheduleFold(viewport, diagramLimit);
       }
       scanFolds();
     }
@@ -1602,23 +1648,35 @@ window.__ModuleLoader__.load({
         foldDiagram.value = String(DEFAULT_SETTINGS.foldDiagram);
       });
       saveButton.addEventListener("click", () => {
-        saveSettings({
+        var previous = readSettings();
+        var previousTheme = getMermaidTheme();
+        var nextTheme = THEME_ORDER.indexOf(themeSelect.value) === -1 ? "blue" : themeSelect.value;
+        var next = {
           codeFontSize: readFontSize(fontInput),
           diagramView: viewSelect.value === "code" ? "code" : "diagram",
           foldCode: readNumber(foldCode, DEFAULT_SETTINGS.foldCode),
           foldTable: readNumber(foldTable, DEFAULT_SETTINGS.foldTable),
           foldDiagram: readNumber(foldDiagram, DEFAULT_SETTINGS.foldDiagram),
-        });
-        memoryTheme = themeSelect.value;
+        };
+        saveSettings(next);
+        memoryTheme = nextTheme;
         try {
-          window.localStorage.setItem(THEME_KEY, themeSelect.value);
+          window.localStorage.setItem(THEME_KEY, nextTheme);
         } catch {
           /* 存不下时保留这次会话的内存副本 */
         }
         applyCodeFontSize();
         refreshThemeButtons();
-        redrawDiagrams();
-        rescanFolds();
+        // 只对实际变化的设置项做副作用；否则用户手动展开的折叠会被一起清掉
+        if (previousTheme !== nextTheme) redrawDiagrams();
+        if (
+          previous.codeFontSize !== next.codeFontSize ||
+          previous.foldCode !== next.foldCode ||
+          previous.foldTable !== next.foldTable ||
+          previous.foldDiagram !== next.foldDiagram
+        ) {
+          rescanFolds();
+        }
         closeSettings();
       });
       closeButton.addEventListener("click", closeSettings);
@@ -1864,7 +1922,7 @@ window.__ModuleLoader__.load({
       var reason = (error?.message ?? String(error)).split("\n")[0] ?? "";
       note.textContent = t("renderFailed") + reason;
       content.appendChild(note);
-      block.setAttribute(KEY_ATTR, key);
+      cacheKeys.set(block, key);
       block.setAttribute(MMD_ATTR, "failed");
       decorate(block);
       console.warn("[dsh-md-plus] mermaid 渲染失败", error);
@@ -1874,6 +1932,7 @@ window.__ModuleLoader__.load({
       if (typeof document === "undefined") return;
       ctx.effect(() => {
         disposed = false;
+        settingsCache = null;
         injectStyle();
         applyCodeFontSize();
         ensureSettingsButton();
@@ -1905,7 +1964,7 @@ window.__ModuleLoader__.load({
           for (const node of document.querySelectorAll("." + FOLD_BTN_CLASS)) node.remove();
           for (const node of document.querySelectorAll("[" + FOLD_ATTR + "]")) resetFold(node);
           for (const node of document.querySelectorAll("." + TABLE_TOOLS_CLASS)) node.remove();
-          for (const attr of [DONE_ATTR, KEY_ATTR, WRAP_ATTR, MMD_ATTR, TABLE_DONE_ATTR, "data-md-plus-lang", ZOOM_ATTR]) {
+          for (const attr of [DONE_ATTR, WRAP_ATTR, MMD_ATTR, TABLE_DONE_ATTR, "data-md-plus-lang", ZOOM_ATTR]) {
             for (const node of document.querySelectorAll("[" + attr + "]")) node.removeAttribute(attr);
           }
           for (const node of document.querySelectorAll("[data-md-plus-original-label]")) {
@@ -1936,6 +1995,9 @@ window.__ModuleLoader__.load({
             script.remove();
           }
           scripts.clear();
+          settingsCache = null;
+          diagramKindCache = new WeakMap();
+          cacheKeys = new WeakMap();
           // 不清运行时全局的话，插件重载后 loadScript() 会直接复用旧引擎
           delete window[HL_GLOBAL];
           delete window[MMD_GLOBAL];
