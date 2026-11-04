@@ -31,6 +31,8 @@ window.__ModuleLoader__.load({
     var BTN_CLASS = "md-plus-btn";
     var ZOOM_IN_CLASS = "md-plus-zoom-in";
     var ZOOM_OUT_CLASS = "md-plus-zoom-out";
+    var COPY_SOURCE_CLASS = "md-plus-copy-source";
+    var DOWNLOAD_CLASS = "md-plus-download";
     var ZOOM_ATTR = "data-md-plus-zoom";
     var ZOOM_STEP = 1.25;
     var ZOOM_MAX = 6;
@@ -66,6 +68,10 @@ window.__ModuleLoader__.load({
         toggleAria: "切换图形与代码",
         fullscreen: "全屏查看",
         fullscreenAria: "全屏查看流程图",
+        copySource: "复制图源",
+        copySourceAria: "复制 Mermaid 图源",
+        downloadCode: "下载代码",
+        downloadCodeAria: "下载代码为文件",
         theme: "切换 Mermaid 配色",
         themeAria: "切换 Mermaid 配色",
         themePrefix: "配色：",
@@ -102,6 +108,8 @@ window.__ModuleLoader__.load({
         settingsViewDiagram: "图形",
         settingsViewCode: "代码",
         settingsFold: "长内容折叠阈值",
+        settingsFoldGroup: "折叠内容",
+        settingsFileGroup: "设置文件",
         settingsFoldCode: "代码块",
         settingsFoldTable: "表格",
         settingsFoldDiagram: "图表",
@@ -115,6 +123,9 @@ window.__ModuleLoader__.load({
         settingsFreezeColsHint: "默认 0 列，按需指定",
         foldExpandAll: "全部展开",
         foldCollapseAll: "全部收起",
+        settingsExport: "导出设置",
+        settingsImport: "导入设置",
+        settingsImportFailed: "导入失败",
         settingsSave: "保存",
         settingsReset: "恢复默认",
         settingsClose: "关闭",
@@ -130,6 +141,10 @@ window.__ModuleLoader__.load({
         toggleAria: "Switch diagram and code",
         fullscreen: "Fullscreen",
         fullscreenAria: "View diagram fullscreen",
+        copySource: "Copy source",
+        copySourceAria: "Copy Mermaid source",
+        downloadCode: "Download code",
+        downloadCodeAria: "Download code as a file",
         theme: "Change Mermaid theme",
         themeAria: "Change Mermaid theme",
         themePrefix: "Theme: ",
@@ -166,6 +181,8 @@ window.__ModuleLoader__.load({
         settingsViewDiagram: "Diagram",
         settingsViewCode: "Code",
         settingsFold: "Fold thresholds",
+        settingsFoldGroup: "Fold content",
+        settingsFileGroup: "Settings file",
         settingsFoldCode: "Code block",
         settingsFoldTable: "Table",
         settingsFoldDiagram: "Diagram",
@@ -179,6 +196,9 @@ window.__ModuleLoader__.load({
         settingsFreezeColsHint: "Defaults to 0 columns; set as needed",
         foldExpandAll: "Expand all",
         foldCollapseAll: "Collapse all",
+        settingsExport: "Export settings",
+        settingsImport: "Import settings",
+        settingsImportFailed: "Import failed",
         settingsSave: "Save",
         settingsReset: "Reset to defaults",
         settingsClose: "Close",
@@ -342,6 +362,9 @@ window.__ModuleLoader__.load({
       "<rect x='9' y='9' width='12' height='12' rx='2.5'/>" +
         "<path d='M6 15H5.5A2.5 2.5 0 0 1 3 12.5v-7A2.5 2.5 0 0 1 5.5 3h7A2.5 2.5 0 0 1 15 5.5V6'/>",
     );
+    var ICON_DOWNLOAD = icon(
+      "<path d='M12 3v12'/><path d='m7 10 5 5 5-5'/><path d='M5 21h14'/>",
+    );
     var ICON_NOWRAP = icon(
       "<path d='M3 12h12.5'/><path d='M12.5 8.5 16.5 12l-4 3.5'/><path d='M20 6v12'/>",
     );
@@ -382,7 +405,7 @@ window.__ModuleLoader__.load({
 
     var CSS = [
       // ── 卡片：整块一个底色，顶栏不再是独立色带 ──────────────────────
-      ".md-code-block{--md-plus-mmd-min-height:200px;--md-plus-icon:" + ICON_CODE + ";--md-plus-icon-copy:" + ICON_COPY + ";--md-plus-icon-nowrap:" + ICON_NOWRAP + ";--md-plus-icon-diagram:" + ICON_DIAGRAM + ";--md-plus-icon-zoom-in:" + ICON_ZOOM_IN + ";--md-plus-icon-zoom-out:" + ICON_ZOOM_OUT + ";--md-plus-icon-expand:" + ICON_EXPAND + ";--md-plus-icon-theme:" + ICON_THEME + ";--md-plus-icon-retry:" + ICON_RETRY + "}",
+      ".md-code-block{--md-plus-mmd-min-height:200px;--md-plus-icon:" + ICON_CODE + ";--md-plus-icon-copy:" + ICON_COPY + ";--md-plus-icon-download:" + ICON_DOWNLOAD + ";--md-plus-icon-nowrap:" + ICON_NOWRAP + ";--md-plus-icon-diagram:" + ICON_DIAGRAM + ";--md-plus-icon-zoom-in:" + ICON_ZOOM_IN + ";--md-plus-icon-zoom-out:" + ICON_ZOOM_OUT + ";--md-plus-icon-expand:" + ICON_EXPAND + ";--md-plus-icon-theme:" + ICON_THEME + ";--md-plus-icon-retry:" + ICON_RETRY + "}",
       // bannerWrap 的原底色是 --dsw-alias-bg-base（#fff），会跟卡片灰拉开一条带
       ".md-code-block > div:has(> " + BANNER + "){background:transparent}",
 
@@ -400,8 +423,10 @@ window.__ModuleLoader__.load({
       // ── 间距：头部与首行代码之间补 6px ──────────────────────────────
       // pre 的行高本身就在首行文字上方留了约半行空白；补 6px 后实测间距约 17px
       // （原来给 0 时只有 11px，贴着看太挤）
-      ".md-code-block pre{padding:6px 16px 16px;font-size:var(--md-plus-code-font-size,inherit)}",
-      ".md-code-block pre{line-height:var(--md-plus-code-line-height,inherit)}",
+      // 未设字号时不能回退 inherit：pre 的父级是正文，会把宿主的代码字号
+      // （--dsh-code-font-size）盖成正文大小；回退到宿主变量才是真「跟随宿主」。
+      ".md-code-block pre{padding:6px 16px 16px;font-size:var(--md-plus-code-font-size,var(--dsh-code-font-size,11px))}",
+      ".md-code-block pre{line-height:var(--md-plus-code-line-height,calc(19px + var(--dsh-code-font-delta,0px)))}",
       // DSH 0.2.1 把内容容器设成 display:contents，折叠需要真实的盒子才能量高度和裁剪
       ".md-code-block > [data-code-block-content]{display:block}",
 
@@ -425,6 +450,8 @@ window.__ModuleLoader__.load({
       ".md-code-block " + BANNER + " ." + ZOOM_OUT_CLASS + "::before{-webkit-mask:var(--md-plus-icon-zoom-out) center/contain no-repeat;mask:var(--md-plus-icon-zoom-out) center/contain no-repeat}",
       ".md-code-block " + BANNER + " ." + EXPAND_CLASS + "::before{-webkit-mask:var(--md-plus-icon-expand) center/contain no-repeat;mask:var(--md-plus-icon-expand) center/contain no-repeat}",
       ".md-code-block " + BANNER + " ." + THEME_CLASS + "::before{-webkit-mask:var(--md-plus-icon-theme) center/contain no-repeat;mask:var(--md-plus-icon-theme) center/contain no-repeat}",
+      ".md-code-block " + BANNER + " ." + COPY_SOURCE_CLASS + "::before{-webkit-mask:var(--md-plus-icon-copy) center/contain no-repeat;mask:var(--md-plus-icon-copy) center/contain no-repeat}",
+      ".md-code-block " + BANNER + " ." + DOWNLOAD_CLASS + "::before{-webkit-mask:var(--md-plus-icon-download) center/contain no-repeat;mask:var(--md-plus-icon-download) center/contain no-repeat}",
       ".md-code-block " + BANNER + " ." + RETRY_CLASS + "::before{-webkit-mask:var(--md-plus-icon-retry) center/contain no-repeat;mask:var(--md-plus-icon-retry) center/contain no-repeat}",
       '[' + MMD_ATTR + '="diagram"] .' + TOGGLE_CLASS + "{color:var(--dsw-alias-button-primary-fill,#4c6ef5);background:var(--dsw-alias-interactive-bg-active,rgb(76 110 245 / 12%))}",
       // 已经到最小 / 最大时，对应那颗按钮变淡且不可点
@@ -478,22 +505,29 @@ window.__ModuleLoader__.load({
       "." + SETTINGS_BTN_CLASS + "::before{content:'';width:16px;height:16px;background:currentColor;-webkit-mask:var(--md-plus-icon-gear) center/contain no-repeat;mask:var(--md-plus-icon-gear) center/contain no-repeat}",
       "." + SETTINGS_MODAL_CLASS + "{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:calc(var(--dsh-windows-titlebar-height,0px) + 16px) 24px 24px;background:rgb(0 0 0 / 48%)}",
       "." + SETTINGS_MODAL_CLASS + "-panel{width:min(440px,100%);max-height:86vh;overflow:auto;padding:16px 18px 14px;border:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 18%));border-radius:12px;background:var(--dsw-alias-bg-base,#fff);box-shadow:0 24px 80px rgb(0 0 0 / 25%)}",
-      "." + SETTINGS_MODAL_CLASS + "-title{margin:0 0 6px;font:600 14px/22px var(--dsw-font-family-sans,system-ui,sans-serif);color:var(--dsw-alias-label-primary)}",
-      "." + SETTINGS_MODAL_CLASS + "-row{display:flex;align-items:center;gap:12px;margin:11px 0}",
+      "." + SETTINGS_MODAL_CLASS + "-title{margin:0 0 10px;font:600 14px/22px var(--dsw-font-family-sans,system-ui,sans-serif);color:var(--dsw-alias-label-primary)}",
+      "." + SETTINGS_MODAL_CLASS + "-row{display:flex;align-items:center;gap:12px;min-height:36px;margin:0 0 10px}",
       "." + SETTINGS_MODAL_CLASS + "-label{display:flex;flex-direction:column;gap:1px;flex:1;min-width:0;font:13px/20px var(--dsw-font-family-sans,system-ui,sans-serif);color:var(--dsw-alias-label-primary)}",
       "." + SETTINGS_MODAL_CLASS + "-label-title{display:block}",
       "." + SETTINGS_MODAL_CLASS + "-label-hint{display:block;font:11px/16px var(--dsw-font-family-sans,system-ui,sans-serif);color:var(--dsw-alias-label-tertiary)}",
       "." + SETTINGS_MODAL_CLASS + "-hint{margin:-4px 0 8px;font:11px/16px var(--dsw-font-family-sans,system-ui,sans-serif);color:var(--dsw-alias-label-tertiary)}",
+      "." + SETTINGS_MODAL_CLASS + "-section{margin:14px 0 8px;font:600 12px/18px var(--dsw-font-family-sans,system-ui,sans-serif);color:var(--dsw-alias-label-secondary)}",
       "." + SETTINGS_MODAL_CLASS + " input[type=number]{width:78px;padding:4px 6px;border:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 22%));border-radius:6px;background:var(--dsw-alias-bg-layer-2,rgb(127 127 127 / 6%));color:var(--dsw-alias-label-primary);font:13px/18px var(--dsw-font-family-sans,system-ui,sans-serif)}",
       "." + SETTINGS_MODAL_CLASS + " select{padding:4px 6px;border:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 22%));border-radius:6px;background:var(--dsw-alias-bg-layer-2,rgb(127 127 127 / 6%));color:var(--dsw-alias-label-primary);font:13px/18px var(--dsw-font-family-sans,system-ui,sans-serif)}",
-      "." + SETTINGS_MODAL_CLASS + "-fold-actions{display:flex;justify-content:flex-end;gap:8px;margin:2px 0 0}",
-      "." + SETTINGS_MODAL_CLASS + "-fold-actions button{appearance:none;border:0;border-radius:6px;padding:4px 10px;background:var(--dsw-alias-interactive-bg-hover,rgb(127 127 127 / 12%));color:var(--dsw-alias-label-primary);font:12px/18px var(--dsw-font-family-sans,system-ui,sans-serif);cursor:pointer}",
-      "." + SETTINGS_MODAL_CLASS + "-fold-actions button:hover{background:var(--dsw-alias-interactive-bg-active,rgb(76 110 245 / 12%))}",
-      "." + SETTINGS_MODAL_CLASS + "-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}",
-      "." + SETTINGS_MODAL_CLASS + "-actions button{appearance:none;border:0;border-radius:6px;padding:5px 12px;background:var(--dsw-alias-interactive-bg-hover,rgb(127 127 127 / 12%));color:var(--dsw-alias-label-primary);font:12px/18px var(--dsw-font-family-sans,system-ui,sans-serif);cursor:pointer}",
-      "." + SETTINGS_MODAL_CLASS + "-actions button:not(." + SETTINGS_MODAL_CLASS + "-primary):hover{background:var(--dsw-alias-interactive-bg-active,rgb(76 110 245 / 12%))}",
+      "." + SETTINGS_MODAL_CLASS + "-footer{margin-top:18px;padding-top:14px;border-top:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 18%))}",
+      "." + SETTINGS_MODAL_CLASS + "-utilities{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 18px;margin:0 0 14px}",
+      "." + SETTINGS_MODAL_CLASS + "-fold-actions," + "." + SETTINGS_MODAL_CLASS + "-transfer-actions{display:flex;align-items:center;gap:8px}",
+      "." + SETTINGS_MODAL_CLASS + "-utility-label{font:11px/16px var(--dsw-font-family-sans,system-ui,sans-serif);color:var(--dsw-alias-label-tertiary);white-space:nowrap}",
+      "." + SETTINGS_MODAL_CLASS + "-segment{display:inline-flex;align-items:center;gap:1px;padding:2px;border:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 18%));border-radius:8px;background:var(--dsw-alias-bg-layer-2,rgb(127 127 127 / 5%))}",
+      "." + SETTINGS_MODAL_CLASS + "-segment button{appearance:none;border:0;border-radius:6px;padding:4px 8px;background:transparent;color:var(--dsw-alias-label-secondary);font:12px/18px var(--dsw-font-family-sans,system-ui,sans-serif);cursor:pointer}",
+      "." + SETTINGS_MODAL_CLASS + "-segment button:hover{background:var(--dsw-alias-interactive-bg-hover,rgb(127 127 127 / 12%));color:var(--dsw-alias-label-primary)}",
+      "." + SETTINGS_MODAL_CLASS + "-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:0}",
+      "." + SETTINGS_MODAL_CLASS + "-actions button{appearance:none;border:0;border-radius:7px;min-height:30px;padding:5px 12px;background:transparent;color:var(--dsw-alias-label-secondary);font:12px/18px var(--dsw-font-family-sans,system-ui,sans-serif);cursor:pointer}",
+      "." + SETTINGS_MODAL_CLASS + "-actions button:first-child{margin-right:auto;color:var(--dsw-alias-label-tertiary)}",
+      "." + SETTINGS_MODAL_CLASS + "-actions button:not(." + SETTINGS_MODAL_CLASS + "-primary):hover{background:var(--dsw-alias-interactive-bg-hover,rgb(127 127 127 / 12%));color:var(--dsw-alias-label-primary)}",
       "." + SETTINGS_MODAL_CLASS + "-actions ." + SETTINGS_MODAL_CLASS + "-primary{background:var(--dsw-alias-button-primary-fill,#4c6ef5);color:var(--dsw-alias-label-primary-foreground,#fff)}",
       "." + SETTINGS_MODAL_CLASS + "-actions ." + SETTINGS_MODAL_CLASS + "-primary:hover{background:var(--dsw-alias-button-primary-hover,var(--dsw-alias-button-primary-fill,#4c6ef5))}",
+      "." + SETTINGS_MODAL_CLASS + "-fold-actions button:focus-visible," + "." + SETTINGS_MODAL_CLASS + "-transfer-actions button:focus-visible," + "." + SETTINGS_MODAL_CLASS + "-actions button:focus-visible{outline:2px solid var(--dsw-alias-button-primary-fill,#4c6ef5);outline-offset:1px}",
 
       // 高亮宿主不参与布局，让里面的 <pre> 直接吃到卡片样式
       "." + HOST_CLASS + "{display:contents}",
@@ -847,18 +881,23 @@ window.__ModuleLoader__.load({
       schedule();
     }
 
-    /** 插件往头部插的按钮：普通块只有「不换行」，mermaid 块多两颗缩放。 */
-    var PLAIN_BUTTONS = [
-      {
-        cls: TOOL_CLASS,
-        titleKey: "wrapTitle",
-        ariaKey: "wrapAria",
-        run: (block) => {
-          if (block.getAttribute(WRAP_ATTR) === "on") block.removeAttribute(WRAP_ATTR);
-          else block.setAttribute(WRAP_ATTR, "on");
-        },
+    /** 插件往头部插的按钮：普通块有换行和下载，mermaid 块多两颗缩放。 */
+    var WRAP_BUTTON = {
+      cls: TOOL_CLASS,
+      titleKey: "wrapTitle",
+      ariaKey: "wrapAria",
+      run: (block) => {
+        if (block.getAttribute(WRAP_ATTR) === "on") block.removeAttribute(WRAP_ATTR);
+        else block.setAttribute(WRAP_ATTR, "on");
       },
-    ];
+    };
+    var DOWNLOAD_BUTTON = {
+      cls: DOWNLOAD_CLASS,
+      titleKey: "downloadCode",
+      ariaKey: "downloadCodeAria",
+      run: (block) => downloadCode(block),
+    };
+    var PLAIN_BUTTONS = [WRAP_BUTTON, DOWNLOAD_BUTTON];
     var MMD_BUTTONS = [
       { cls: ZOOM_OUT_CLASS, titleKey: "zoomOut", ariaKey: "zoomOutAria", run: (block) => zoomBy(block, 1 / ZOOM_STEP) },
       { cls: ZOOM_IN_CLASS, titleKey: "zoomIn", ariaKey: "zoomInAria", run: (block) => zoomBy(block, ZOOM_STEP) },
@@ -887,6 +926,12 @@ window.__ModuleLoader__.load({
         titleKey: "theme",
         ariaKey: "themeAria",
         run: (block) => cycleMermaidTheme(block),
+      },
+      {
+        cls: COPY_SOURCE_CLASS,
+        titleKey: "copySource",
+        ariaKey: "copySourceAria",
+        run: (block, button) => copyDiagramSource(block, button),
       },
     ];
 
@@ -931,13 +976,14 @@ window.__ModuleLoader__.load({
       var lang = readLang(block);
       if (lang !== "" && isPlaceholderLabel(label)) paintLanguageLabel(block, lang);
 
+      var hasNativeWrap = findNativeWrap(nativeButtons) !== null;
       var specs =
         block.getAttribute(MMD_ATTR) === "failed"
           ? FAILED_BUTTONS
           : diagramKind(block) !== null
             ? MMD_BUTTONS
-            : findNativeWrap(nativeButtons) !== null
-              ? []
+            : hasNativeWrap
+              ? [DOWNLOAD_BUTTON]
               : PLAIN_BUTTONS;
       for (const existing of action.querySelectorAll("." + BTN_CLASS)) {
         if (specs.some((spec) => existing.classList.contains(spec.cls))) continue;
@@ -956,7 +1002,7 @@ window.__ModuleLoader__.load({
           created.title = themeText;
           created.setAttribute("aria-label", themeText);
         }
-        created.addEventListener("click", () => spec.run(block));
+        created.addEventListener("click", () => spec.run(block, created));
         action.insertBefore(created, copy);
         injected.add(created);
       }
@@ -1491,6 +1537,37 @@ window.__ModuleLoader__.load({
       return output.join("\n");
     }
 
+    var CODE_EXTENSIONS = {
+      bash: "sh",
+      batch: "bat",
+      c: "c",
+      cpp: "cpp",
+      csharp: "cs",
+      css: "css",
+      go: "go",
+      html: "html",
+      java: "java",
+      javascript: "js",
+      json: "json",
+      jsx: "jsx",
+      kotlin: "kt",
+      markdown: "md",
+      mermaid: "mmd",
+      php: "php",
+      python: "py",
+      ruby: "rb",
+      rust: "rs",
+      shell: "sh",
+      shellscript: "sh",
+      sql: "sql",
+      swift: "swift",
+      tsx: "tsx",
+      typescript: "ts",
+      xml: "xml",
+      yaml: "yml",
+      yml: "yml",
+    };
+
     /** 写剪贴板；老环境没有 Clipboard API 或权限被拒时退回隐藏 textarea。 */
     async function copyText(text) {
       if (
@@ -1539,6 +1616,42 @@ window.__ModuleLoader__.load({
         }
       }
       return copyText(text);
+    }
+
+    async function copyDiagramSource(block, button) {
+      var pre = block.querySelector(CONTENT + " pre");
+      if (pre === null) return;
+      var ok = false;
+      try {
+        ok = await copyText(pre.textContent ?? "");
+      } catch {
+        ok = false;
+      }
+      if (button !== undefined) {
+        var original = button.title;
+        var label = ok ? t("copied") : t("copyFailed");
+        button.title = label;
+        button.setAttribute("aria-label", label);
+        window.setTimeout(() => {
+          button.title = original;
+          button.setAttribute("aria-label", original);
+        }, 1200);
+      }
+    }
+
+    function downloadCode(block) {
+      var pre = block.querySelector(CONTENT + " pre");
+      if (pre === null) return;
+      var lang = readLang(block);
+      var ext = CODE_EXTENSIONS[lang] ?? "txt";
+      try {
+        downloadBlob(
+          new Blob([pre.textContent ?? ""], { type: "text/plain;charset=utf-8" }),
+          "code-snippet." + ext,
+        );
+      } catch (error) {
+        console.warn("[dsh-md-plus] 代码下载失败", error);
+      }
     }
 
     function flashButton(button, text) {
@@ -1873,6 +1986,18 @@ window.__ModuleLoader__.load({
       }
     }
 
+    function exportSettings() {
+      try {
+        var payload = { settings: readSettings(), mermaidTheme: getMermaidTheme() };
+        downloadBlob(
+          new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" }),
+          "dsh-md-plus-settings.json",
+        );
+      } catch (error) {
+        console.warn("[dsh-md-plus] 设置导出失败", error);
+      }
+    }
+
     function openSettings() {
       if (document.querySelector("." + SETTINGS_MODAL_CLASS) !== null) return;
       var current = readSettings();
@@ -1900,11 +2025,9 @@ window.__ModuleLoader__.load({
       panel.appendChild(settingRow(t("settingsTheme"), themeSelect));
 
       var fontInput = numberInput(current.codeFontSize, 10, 20);
-      panel.appendChild(settingRow(t("settingsFontSize"), fontInput));
-      var fontHint = document.createElement("p");
-      fontHint.className = SETTINGS_MODAL_CLASS + "-hint";
-      fontHint.textContent = t("settingsFontSizeHint");
-      panel.appendChild(fontHint);
+      panel.appendChild(
+        settingRow(t("settingsFontSize"), fontInput, t("settingsFontSizeHint")),
+      );
 
       var viewSelect = document.createElement("select");
       for (const [value, label] of [
@@ -1920,7 +2043,7 @@ window.__ModuleLoader__.load({
       panel.appendChild(settingRow(t("settingsView"), viewSelect));
 
       var foldHint = document.createElement("p");
-      foldHint.className = SETTINGS_MODAL_CLASS + "-hint";
+      foldHint.className = SETTINGS_MODAL_CLASS + "-section";
       foldHint.textContent = t("settingsFold") + " · " + t("settingsFoldHint");
       panel.appendChild(foldHint);
       var foldCode = numberInput(current.foldCode, 0, 4000);
@@ -1941,15 +2064,47 @@ window.__ModuleLoader__.load({
 
       var foldActions = document.createElement("div");
       foldActions.className = SETTINGS_MODAL_CLASS + "-fold-actions";
+      foldActions.setAttribute("role", "group");
+      foldActions.setAttribute("aria-label", t("settingsFoldGroup"));
+      var foldLabel = document.createElement("span");
+      foldLabel.className = SETTINGS_MODAL_CLASS + "-utility-label";
+      foldLabel.textContent = t("settingsFoldGroup");
+      var foldSegment = document.createElement("span");
+      foldSegment.className = SETTINGS_MODAL_CLASS + "-segment";
       var expandAllButton = document.createElement("button");
       expandAllButton.type = "button";
       expandAllButton.textContent = t("foldExpandAll");
       var collapseAllButton = document.createElement("button");
       collapseAllButton.type = "button";
       collapseAllButton.textContent = t("foldCollapseAll");
-      foldActions.appendChild(expandAllButton);
-      foldActions.appendChild(collapseAllButton);
-      panel.appendChild(foldActions);
+      foldSegment.appendChild(expandAllButton);
+      foldSegment.appendChild(collapseAllButton);
+      foldActions.appendChild(foldLabel);
+      foldActions.appendChild(foldSegment);
+
+      var transferActions = document.createElement("div");
+      transferActions.className = SETTINGS_MODAL_CLASS + "-transfer-actions";
+      transferActions.setAttribute("role", "group");
+      transferActions.setAttribute("aria-label", t("settingsFileGroup"));
+      var transferLabel = document.createElement("span");
+      transferLabel.className = SETTINGS_MODAL_CLASS + "-utility-label";
+      transferLabel.textContent = t("settingsFileGroup");
+      var transferSegment = document.createElement("span");
+      transferSegment.className = SETTINGS_MODAL_CLASS + "-segment";
+      var exportButton = document.createElement("button");
+      exportButton.type = "button";
+      exportButton.textContent = t("settingsExport");
+      var importButton = document.createElement("button");
+      importButton.type = "button";
+      importButton.textContent = t("settingsImport");
+      var fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.accept = ".json,application/json";
+      fileInput.style.display = "none";
+      transferSegment.appendChild(exportButton);
+      transferSegment.appendChild(importButton);
+      transferActions.appendChild(transferLabel);
+      transferActions.appendChild(transferSegment);
 
       var actions = document.createElement("div");
       actions.className = SETTINGS_MODAL_CLASS + "-actions";
@@ -1966,7 +2121,17 @@ window.__ModuleLoader__.load({
       actions.appendChild(resetButton);
       actions.appendChild(closeButton);
       actions.appendChild(saveButton);
-      panel.appendChild(actions);
+
+      var utilities = document.createElement("div");
+      utilities.className = SETTINGS_MODAL_CLASS + "-utilities";
+      utilities.appendChild(foldActions);
+      utilities.appendChild(transferActions);
+      var footer = document.createElement("div");
+      footer.className = SETTINGS_MODAL_CLASS + "-footer";
+      footer.appendChild(utilities);
+      footer.appendChild(actions);
+      panel.appendChild(footer);
+      panel.appendChild(fileInput);
       overlay.appendChild(panel);
 
       var previousFocus = document.activeElement;
@@ -2001,6 +2166,56 @@ window.__ModuleLoader__.load({
         return Math.min(20, Math.max(10, Math.round(value)));
       }
 
+      function importSettingsFile(file) {
+        file
+          .text()
+          .then((text) => {
+            var parsed = JSON.parse(text);
+            var source =
+              parsed !== null &&
+              typeof parsed === "object" &&
+              parsed.settings !== null &&
+              typeof parsed.settings === "object"
+                ? parsed.settings
+                : parsed;
+            if (source === null || typeof source !== "object") throw new Error("设置格式无效");
+            var font = Number(source.codeFontSize);
+            if (Number.isFinite(font)) {
+              fontInput.value = font > 0 ? String(Math.min(20, Math.max(10, Math.round(font)))) : "";
+            }
+            for (const [key, input, max] of [
+              ["foldCode", foldCode, 4000],
+              ["foldTable", foldTable, 4000],
+              ["foldDiagram", foldDiagram, 4000],
+              ["freezeRows", freezeRowsInput, 5],
+              ["freezeCols", freezeColsInput, 5],
+            ]) {
+              var value = Number(source[key]);
+              if (Number.isFinite(value) && value >= 0) {
+                input.value = String(Math.min(max, Math.round(value)));
+              }
+            }
+            if (source.diagramView === "code" || source.diagramView === "diagram") {
+              viewSelect.value = source.diagramView;
+            }
+            var theme = parsed !== null && typeof parsed === "object" ? parsed.mermaidTheme : null;
+            if (typeof theme === "string" && THEME_ORDER.indexOf(theme) !== -1) {
+              themeSelect.value = theme;
+            }
+            saveButton.click();
+          })
+          .catch(() => {
+            flashButton(importButton, t("settingsImportFailed"));
+          });
+      }
+
+      exportButton.addEventListener("click", exportSettings);
+      importButton.addEventListener("click", () => fileInput.click());
+      fileInput.addEventListener("change", () => {
+        var file = fileInput.files?.[0];
+        if (file !== null && file !== undefined) importSettingsFile(file);
+        fileInput.value = "";
+      });
       expandAllButton.addEventListener("click", () => setAllFolds(true));
       collapseAllButton.addEventListener("click", () => setAllFolds(false));
       resetButton.addEventListener("click", () => {

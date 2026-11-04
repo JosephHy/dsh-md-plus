@@ -272,7 +272,7 @@ test("占位文案不会被当成图：普通代码留在代码形态", async ()
   assert.equal(window.__DSH_MD_PLUS_MMD__.calls.length, 0, "普通代码不该被送去画图");
   assert.equal(block.hasAttribute("data-md-plus-mmd"), false, "不该标成图块");
   assert.equal(tagOf(block.querySelector(".md-plus-tool")), "null", "DSH 已有原生换行按钮时不应再加一颗");
-  assert.equal(block.querySelectorAll("[data-code-block-banner] button").length, 2, "保留原生换行与复制");
+  assert.equal(block.querySelectorAll("[data-code-block-banner] button").length, 3, "保留原生换行与复制，并补下载");
   const src = block.querySelector("[data-code-block-content] pre");
   assert.equal(src.textContent, "void main() {}", "源码原样留着，复制仍拿到原文");
 });
@@ -293,7 +293,7 @@ test("普通代码里的 graph = / pie = / timeline = 不会被当成 mermaid", 
     const block = document.querySelector(".md-code-block");
     assert.equal(window.__DSH_MD_PLUS_MMD__.calls.length, 0, `${source} 不该被送去画图`);
     assert.equal(block.hasAttribute("data-md-plus-mmd"), false, `${source} 不该标成图块`);
-    assert.equal(block.querySelectorAll("[data-code-block-banner] button").length, 2, "保留原生按钮");
+    assert.equal(block.querySelectorAll("[data-code-block-banner] button").length, 3, "保留原生按钮并补下载");
   }
 });
 
@@ -409,17 +409,24 @@ test("图形被包进 viewport / stage 两层", async () => {
   assert.ok(viewport.querySelector(".md-plus-mmd-stage svg"), "stage 里才是 svg");
 });
 
-test("头部六颗按钮：缩小 / 放大 / 切换 / 全屏 / 配色 / 复制", async () => {
+test("头部七颗按钮：缩小 / 放大 / 切换 / 全屏 / 配色 / 复制图源 / 复制", async () => {
   const block = await mermaidBlock();
   const buttons = [...block.querySelectorAll("[data-code-block-banner] button")];
   assert.deepEqual(
     buttons.map((b) => b.classList.contains("md-plus-btn")),
-    [true, true, true, true, true, false],
+    [true, true, true, true, true, true, false],
     "最后那颗是 DSH 原生的复制按钮",
   );
   assert.deepEqual(
-    buttons.slice(0, 5).map((b) => [...b.classList].filter((c) => c !== "md-plus-btn")),
-    [["md-plus-zoom-out"], ["md-plus-zoom-in"], ["md-plus-toggle"], ["md-plus-expand"], ["md-plus-theme"]],
+    buttons.slice(0, 6).map((b) => [...b.classList].filter((c) => c !== "md-plus-btn")),
+    [
+      ["md-plus-zoom-out"],
+      ["md-plus-zoom-in"],
+      ["md-plus-toggle"],
+      ["md-plus-expand"],
+      ["md-plus-theme"],
+      ["md-plus-copy-source"],
+    ],
   );
 });
 
@@ -907,7 +914,16 @@ test("样式表针对所有代码块，不只是补高亮的那些", async () =>
 
   assert.match(css, /\.md-code-block \[data-code-block-banner\]\{padding:8px 16px 0/, "头部自身不留下方内边距");
   assert.match(css, /:empty::after\{content:'Plain text'\}/, "没语言要有占位名，否则左边一片空白");
-  assert.match(css, /\.md-code-block pre\{padding:6px 16px 16px;font-size:var\(--md-plus-code-font-size,inherit\)\}/, "首行代码上方补 6px，别贴着头部");
+  assert.match(
+    css,
+    /\.md-code-block pre\{padding:6px 16px 16px;font-size:var\(--md-plus-code-font-size,var\(--dsh-code-font-size,11px\)\)\}/,
+    "首行代码上方补 6px，别贴着头部；未设字号时回退宿主的代码字号",
+  );
+  assert.match(
+    css,
+    /\.md-code-block pre\{line-height:var\(--md-plus-code-line-height,calc\(19px \+ var\(--dsh-code-font-delta,0px\)\)\)\}/,
+    "未设字号时行高跟随宿主代码字号的增量",
+  );
   assert.match(css, /\{background:transparent\}/, "要去掉 bannerWrap 的白色色带");
   assert.match(css, /md-plus-icon-copy/, "复制按钮要换成图标");
 });
@@ -974,16 +990,17 @@ test("图标是自包含的 data URI，不依赖外部资源", async () => {
   assert.equal(/url\(["']?https?:/.test(css), false, "不该有外链");
 });
 
-test("每个代码块都拿到「不换行」按钮，且在复制按钮前面", async () => {
+test("每个代码块都拿到「不换行」和「下载」按钮，且在复制按钮前面", async () => {
   mount();
   document.body.innerHTML = codeBlockHtml("dart", "int a = 1;");
   await settle();
 
   const action = document.querySelector("[data-code-block-banner] > :last-child");
   const buttons = [...action.querySelectorAll("button")];
-  assert.equal(buttons.length, 2, "应该有「不换行」+「复制」两个按钮");
-  assert.ok(buttons[0].classList.contains("md-plus-tool"), "插件的按钮要排在前面");
-  assert.equal(buttons[1].textContent, "复制", "原复制按钮要留在后面");
+  assert.equal(buttons.length, 3, "应该有「不换行」+「下载」+「复制」三个按钮");
+  assert.ok(buttons[0].classList.contains("md-plus-tool"), "换行按钮要排在前面");
+  assert.ok(buttons[1].classList.contains("md-plus-download"), "下载按钮排在复制前面");
+  assert.equal(buttons[2].textContent, "复制", "原复制按钮要留在最后");
 });
 
 test("DSH 自己高亮的语言也有同样的头部样式", async () => {
@@ -1463,6 +1480,39 @@ test("离开 Markdown 页面后设置齿轮会被移除", async () => {
   document.body.innerHTML = '<div class="_settings_x">设置</div>';
   await settle();
   assert.equal(document.querySelector(".md-plus-settings-btn"), null, "离开 Markdown 页面后齿轮不能残留");
+});
+
+test("Mermaid 卡片可以复制图源", async () => {
+  mount();
+  const copied = stubClipboard();
+  document.body.innerHTML = codeBlockHtml("mermaid", "flowchart LR\n A --- B");
+  await settle();
+
+  const button = document.querySelector(".md-plus-copy-source");
+  assert.ok(button, "Mermaid 工具栏要有复制图源按钮");
+  button.dispatchEvent(new window.Event("click"));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(copied.at(-1), "flowchart LR\n A --- B");
+});
+
+test("代码块提供下载按钮", async () => {
+  mount();
+  document.body.innerHTML = codeBlockHtml("python", "print(1)");
+  await settle();
+  const button = document.querySelector(".md-plus-download");
+  assert.ok(button, "普通代码块要有下载按钮");
+  assert.equal(button.title, "下载代码");
+});
+
+test("设置面板提供导入 / 导出设置入口", async () => {
+  mount();
+  document.body.innerHTML = codeBlockHtml("dart", "int a = 1;");
+  await settle();
+  document.querySelector(".md-plus-settings-btn").dispatchEvent(new window.Event("click"));
+  const modal = document.querySelector(".md-plus-settings-modal");
+  const buttons = [...modal.querySelectorAll(".md-plus-settings-modal-transfer-actions button")];
+  assert.deepEqual(buttons.map((button) => button.textContent), ["导出设置", "导入设置"]);
+  assert.ok(modal.querySelector('input[type="file"]'), "导入需要文件选择入口");
 });
 
 test("localStorage 读成功写失败时 Mermaid 配色仍在当前会话生效", async () => {
