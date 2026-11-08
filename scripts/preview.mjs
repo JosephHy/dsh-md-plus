@@ -98,6 +98,7 @@ function caption(text) {
 
 // ── 1. 让插件在模拟 DOM 里真跑一遍，拿到 CSS 与普通代码块的 DOM ────────
 const window = new Window({ url: "http://127.0.0.1:43120/" });
+window.document.documentElement.lang = "zh-CN";
 globalThis.window = window;
 globalThis.document = window.document;
 globalThis.MutationObserver = window.MutationObserver;
@@ -166,6 +167,60 @@ const highlighter = await createHighlighterCore({
 });
 const jsonHtml = highlighter.codeToHtml(JSON_CODE, { lang: "json", theme });
 
+// 语义视图样例：只在需要单独检查语义视图时打开，默认不影响 README 预览图
+const SEMANTIC_SAMPLES =
+  process.env.SEMANTIC_PREVIEW === "1"
+    ? [
+        [
+          "json",
+          JSON.stringify(
+            {
+              name: "dsh-md-plus",
+              version: "0.6.0",
+              features: ["json", "csv", "log", "diff"],
+              nested: { enabled: true, count: 3 },
+            },
+            null,
+            2,
+          ),
+        ],
+        [
+          "csv",
+          [
+            "name,language,stars",
+            "dsh-md-plus,JavaScript,128",
+            "mermaid,TypeScript,72000",
+            "shiki,TypeScript,11000",
+          ].join("\n"),
+        ],
+        [
+          "log",
+          [
+            "2026-11-08 10:00:00 INFO  服务启动",
+            "2026-11-08 10:00:01 WARN  缓存命中率偏低",
+            "2026-11-08 10:00:02 ERROR 请求处理失败",
+          ].join("\n"),
+        ],
+        [
+          "diff",
+          [
+            "@@ -1,4 +1,4 @@",
+            " const title = \"dsh-md-plus\";",
+            "-const version = \"0.5.0\";",
+            "+const version = \"0.6.0\";",
+            " export default { title, version };",
+          ].join("\n"),
+        ],
+      ]
+    : [];
+
+const SEMANTIC_HTML = SEMANTIC_SAMPLES.length
+  ? `<div id="semantic-preview">` +
+    caption("语义视图：JSON 折叠树、CSV 表格、日志级别着色与 diff 单栏 / 并排") +
+    SEMANTIC_SAMPLES.map(([lang, code]) => block(lang, code)).join("") +
+    "</div>"
+  : "";
+
 // 表格：内容用本插件自己的改前 / 改后对照
 const TABLE_HEAD = ["元素", "改前（DSH 原生）", "改后（dsh-md-plus）"];
 const TABLE_ROWS = [
@@ -196,10 +251,18 @@ document.body.innerHTML =
   block("代码块", TREE_CODE) +
   caption("表格：灰底表头、只有横线、外框收圆角，表头吸顶，表格上方可复制为 CSV / Markdown") +
   tableHtml +
+  SEMANTIC_HTML +
   "</div>";
 
 plugin.apply({ effect: (fn) => fn() });
 await new Promise((resolve) => setTimeout(resolve, DEBOUNCE_MS + 400));
+
+if (SEMANTIC_SAMPLES.length > 0) {
+  for (const toggle of document.querySelectorAll("#semantic-preview .md-plus-semantic-toggle")) {
+    toggle.dispatchEvent(new window.Event("click"));
+  }
+  await new Promise((resolve) => setTimeout(resolve, DEBOUNCE_MS));
+}
 
 const pluginCss = document.querySelector("style[data-md-plus-style]").textContent;
 const codeBlocksHtml = document.body.innerHTML;

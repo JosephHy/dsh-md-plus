@@ -9,6 +9,9 @@
 //      并把它藏掉——原节点不动，所以 DSH 的复制按钮仍然照常工作。
 //   3) 图形 —— mermaid 围栏自己渲染成 SVG（取代 dsh-mermaid）。判断依据是
 //      围栏语言，读不到时再看正文里的类型声明，所以 graph / flowchart 两种写法都能画。
+import { semanticKindFor } from "./semantic-parsers.js";
+import { buildSemanticView } from "./semantic-views.js";
+
 window.__ModuleLoader__.load({
   id: "dsh-md-plus",
   factory: (require) => {
@@ -33,6 +36,11 @@ window.__ModuleLoader__.load({
     var ZOOM_OUT_CLASS = "md-plus-zoom-out";
     var COPY_SOURCE_CLASS = "md-plus-copy-source";
     var DOWNLOAD_CLASS = "md-plus-download";
+    var SEMANTIC_CLASS = "md-plus-semantic";
+    var SEMANTIC_TOGGLE_CLASS = "md-plus-semantic-toggle";
+    var SEMANTIC_ATTR = "data-md-plus-semantic";
+    var SEMANTIC_MANUAL_ATTR = "data-md-plus-semantic-manual";
+    var SEMANTIC_MAX_SOURCE = 512 * 1024;
     var ZOOM_ATTR = "data-md-plus-zoom";
     var ZOOM_STEP = 1.25;
     var ZOOM_MAX = 6;
@@ -72,6 +80,31 @@ window.__ModuleLoader__.load({
         copySourceAria: "复制 Mermaid 图源",
         downloadCode: "下载代码",
         downloadCodeAria: "下载代码为文件",
+        semanticToggle: "切换语义视图 / 源码",
+        semanticToggleAria: "切换代码块的语义视图与源码",
+        semanticRenderFailed: "无法解析，已显示源码",
+        semanticTooLarge: "内容过大，建议直接查看源码",
+        semanticJsonInvalid: "JSON 解析失败",
+        semanticJsonObject: "对象",
+        semanticJsonArray: "数组",
+        semanticJsonKeys: "{count} 个键",
+        semanticJsonItems: "{count} 项",
+        semanticJsonExpand: "展开",
+        semanticJsonCollapse: "收起",
+        semanticLoadMore: "显示更多",
+        semanticEmpty: "没有可显示的内容",
+        semanticTableSummary: "{rows} 行 × {cols} 列",
+        semanticLogSummary: "日志 · {count} 行",
+        semanticLogFilter: "日志级别筛选",
+        semanticLogAll: "全部",
+        semanticLogError: "错误",
+        semanticLogWarn: "警告",
+        semanticLogInfo: "信息",
+        semanticLogDebug: "调试",
+        semanticLogOther: "其他",
+        semanticDiffUnified: "单栏",
+        semanticDiffSplit: "并排",
+        semanticDiffEmpty: "没有可显示的差异",
         theme: "切换 Mermaid 配色",
         themeAria: "切换 Mermaid 配色",
         themePrefix: "配色：",
@@ -107,6 +140,10 @@ window.__ModuleLoader__.load({
         settingsView: "图表默认视图",
         settingsViewDiagram: "图形",
         settingsViewCode: "代码",
+        settingsSemantic: "语义视图默认显示",
+        settingsSemanticSource: "源码优先",
+        settingsSemanticView: "语义视图优先",
+        settingsSemanticHint: "支持 JSON / CSV / TSV / 日志 / diff 代码块",
         settingsFold: "长内容折叠阈值",
         settingsFoldGroup: "折叠内容",
         settingsFileGroup: "设置文件",
@@ -145,6 +182,31 @@ window.__ModuleLoader__.load({
         copySourceAria: "Copy Mermaid source",
         downloadCode: "Download code",
         downloadCodeAria: "Download code as a file",
+        semanticToggle: "Switch semantic view / source",
+        semanticToggleAria: "Switch the code block between semantic view and source",
+        semanticRenderFailed: "Could not parse; showing source",
+        semanticTooLarge: "Content is too large; view the source instead",
+        semanticJsonInvalid: "Failed to parse JSON",
+        semanticJsonObject: "Object",
+        semanticJsonArray: "Array",
+        semanticJsonKeys: "{count} keys",
+        semanticJsonItems: "{count} items",
+        semanticJsonExpand: "Expand",
+        semanticJsonCollapse: "Collapse",
+        semanticLoadMore: "Show more",
+        semanticEmpty: "Nothing to display",
+        semanticTableSummary: "{rows} rows × {cols} columns",
+        semanticLogSummary: "Log · {count} lines",
+        semanticLogFilter: "Filter log levels",
+        semanticLogAll: "All",
+        semanticLogError: "Error",
+        semanticLogWarn: "Warn",
+        semanticLogInfo: "Info",
+        semanticLogDebug: "Debug",
+        semanticLogOther: "Other",
+        semanticDiffUnified: "Unified",
+        semanticDiffSplit: "Split",
+        semanticDiffEmpty: "No diff to display",
         theme: "Change Mermaid theme",
         themeAria: "Change Mermaid theme",
         themePrefix: "Theme: ",
@@ -180,6 +242,10 @@ window.__ModuleLoader__.load({
         settingsView: "Default diagram view",
         settingsViewDiagram: "Diagram",
         settingsViewCode: "Code",
+        settingsSemantic: "Default semantic view",
+        settingsSemanticSource: "Source first",
+        settingsSemanticView: "Semantic view first",
+        settingsSemanticHint: "For JSON / CSV / TSV / log / diff code blocks",
         settingsFold: "Fold thresholds",
         settingsFoldGroup: "Fold content",
         settingsFileGroup: "Settings file",
@@ -230,6 +296,7 @@ window.__ModuleLoader__.load({
     var DEFAULT_SETTINGS = {
       codeFontSize: 0,
       diagramView: "diagram",
+      semanticDefaultView: "source",
       foldCode: FOLD_LIMITS.code,
       foldTable: FOLD_LIMITS.table,
       foldDiagram: FOLD_LIMITS.diagram,
@@ -256,6 +323,9 @@ window.__ModuleLoader__.load({
           if (Number.isFinite(size) && size >= 10 && size <= 20) settings.codeFontSize = Math.round(size);
           if (saved.diagramView === "code" || saved.diagramView === "diagram") {
             settings.diagramView = saved.diagramView;
+          }
+          if (saved.semanticDefaultView === "source" || saved.semanticDefaultView === "semantic") {
+            settings.semanticDefaultView = saved.semanticDefaultView;
           }
           for (var key of ["foldCode", "foldTable", "foldDiagram"]) {
             var value = Number(saved[key]);
@@ -365,6 +435,10 @@ window.__ModuleLoader__.load({
     var ICON_DOWNLOAD = icon(
       "<path d='M12 3v12'/><path d='m7 10 5 5 5-5'/><path d='M5 21h14'/>",
     );
+    var ICON_SEMANTIC = icon(
+      "<path d='M9 6h11'/><path d='M9 12h11'/><path d='M9 18h11'/>" +
+        "<path d='M4 6h.01'/><path d='M4 12h.01'/><path d='M4 18h.01'/>",
+    );
     var ICON_NOWRAP = icon(
       "<path d='M3 12h12.5'/><path d='M12.5 8.5 16.5 12l-4 3.5'/><path d='M20 6v12'/>",
     );
@@ -405,7 +479,7 @@ window.__ModuleLoader__.load({
 
     var CSS = [
       // ── 卡片：整块一个底色，顶栏不再是独立色带 ──────────────────────
-      ".md-code-block{--md-plus-mmd-min-height:200px;--md-plus-icon:" + ICON_CODE + ";--md-plus-icon-copy:" + ICON_COPY + ";--md-plus-icon-download:" + ICON_DOWNLOAD + ";--md-plus-icon-nowrap:" + ICON_NOWRAP + ";--md-plus-icon-diagram:" + ICON_DIAGRAM + ";--md-plus-icon-zoom-in:" + ICON_ZOOM_IN + ";--md-plus-icon-zoom-out:" + ICON_ZOOM_OUT + ";--md-plus-icon-expand:" + ICON_EXPAND + ";--md-plus-icon-theme:" + ICON_THEME + ";--md-plus-icon-retry:" + ICON_RETRY + "}",
+      ".md-code-block{--md-plus-mmd-min-height:200px;--md-plus-icon:" + ICON_CODE + ";--md-plus-icon-copy:" + ICON_COPY + ";--md-plus-icon-download:" + ICON_DOWNLOAD + ";--md-plus-icon-nowrap:" + ICON_NOWRAP + ";--md-plus-icon-diagram:" + ICON_DIAGRAM + ";--md-plus-icon-zoom-in:" + ICON_ZOOM_IN + ";--md-plus-icon-zoom-out:" + ICON_ZOOM_OUT + ";--md-plus-icon-expand:" + ICON_EXPAND + ";--md-plus-icon-theme:" + ICON_THEME + ";--md-plus-icon-retry:" + ICON_RETRY + ";--md-plus-icon-semantic:" + ICON_SEMANTIC + "}",
       // bannerWrap 的原底色是 --dsw-alias-bg-base（#fff），会跟卡片灰拉开一条带
       ".md-code-block > div:has(> " + BANNER + "){background:transparent}",
 
@@ -483,6 +557,76 @@ window.__ModuleLoader__.load({
       "." + MODAL_CLASS + "-viewport{flex:1;min-height:0}",
       "." + MODAL_CLASS + "-stage{display:inline-flex;align-items:center;justify-content:center;min-height:0;flex:none}",
       "." + MODAL_CLASS + " svg{display:block}",
+
+      // ── 代码块语义视图：JSON / CSV / 日志 / diff ──────────────────
+      "." + SEMANTIC_CLASS + "{display:none;padding:8px 16px 16px;color:var(--dsw-alias-label-primary);font:12px/18px var(--dsw-font-family-sans,system-ui,sans-serif);--md-plus-tbl-line:#ebebeb;--md-plus-tbl-radius:8px;--md-plus-tbl-head:#f7f7f7;--md-plus-tbl-head-fg:#181818;--md-plus-tbl-hover:#fafafa}",
+      "body[data-ds-dark-theme] ." + SEMANTIC_CLASS + "{--md-plus-tbl-line:#2f2f2f;--md-plus-tbl-head:#1f1f1f;--md-plus-tbl-head-fg:#f9fafb;--md-plus-tbl-hover:#1f1f1f}",
+      '[' + SEMANTIC_ATTR + '="on"] > ' + CONTENT + " > ." + SEMANTIC_CLASS + "{display:block}",
+      '[' + SEMANTIC_ATTR + '="on"] > ' + CONTENT + " pre{display:none}",
+      '[' + SEMANTIC_ATTR + '="on"] > ' + CONTENT + " > ." + HOST_CLASS + "{display:none}",
+      ".md-code-block " + BANNER + " ." + SEMANTIC_TOGGLE_CLASS + "::before{-webkit-mask:var(--md-plus-icon-semantic) center/contain no-repeat;mask:var(--md-plus-icon-semantic) center/contain no-repeat}",
+      '[' + SEMANTIC_ATTR + '="on"] .' + SEMANTIC_TOGGLE_CLASS + "{color:var(--dsw-alias-button-primary-fill,#4c6ef5);background:var(--dsw-alias-interactive-bg-active,rgb(76 110 245 / 12%))}",
+      "." + SEMANTIC_CLASS + "-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap}",
+      "." + SEMANTIC_CLASS + "-summary{font:11px/16px var(--ds-font-family-code,monospace);color:var(--dsw-alias-label-tertiary);white-space:nowrap}",
+      "." + SEMANTIC_CLASS + "-actions{display:flex;align-items:center;gap:4px;flex-wrap:wrap}",
+      "." + SEMANTIC_CLASS + "-btn{appearance:none;border:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 20%));border-radius:5px;padding:2px 7px;background:transparent;color:var(--dsw-alias-label-secondary);font:11px/16px var(--dsw-font-family-sans,system-ui,sans-serif);cursor:pointer;white-space:nowrap}",
+      "." + SEMANTIC_CLASS + "-btn:hover{background:var(--dsw-alias-interactive-bg-hover,rgb(127 127 127 / 12%));color:var(--dsw-alias-label-primary)}",
+      "." + SEMANTIC_CLASS + "-btn-active{color:var(--dsw-alias-button-primary-fill,#4c6ef5);border-color:color-mix(in srgb,var(--dsw-alias-button-primary-fill,#4c6ef5) 45%,transparent);background:color-mix(in srgb,var(--dsw-alias-button-primary-fill,#4c6ef5) 10%,transparent)}",
+      "." + SEMANTIC_CLASS + "-empty{margin:10px 0;padding:14px;border-radius:6px;background:var(--dsw-alias-bg-layer-2,rgb(127 127 127 / 6%));color:var(--dsw-alias-label-tertiary);font:12px/18px var(--dsw-font-family-sans,system-ui,sans-serif);text-align:center}",
+      ".md-plus-semantic-json-tree{font:var(--md-plus-code-font-size,var(--dsh-code-font-size,11px))/1.65 var(--ds-font-family-code,monospace);overflow:auto;max-height:70vh}",
+      ".md-plus-json-row{display:flex;align-items:flex-start;gap:4px;min-height:18px;padding:1px 4px;border-radius:4px}",
+      ".md-plus-json-row:hover{background:var(--dsw-alias-interactive-bg-hover,rgb(127 127 127 / 8%))}",
+      ".md-plus-json-toggle{flex:none;width:14px;padding:0;border:0;background:transparent;color:var(--dsw-alias-label-tertiary);font:12px/1.4 var(--ds-font-family-code,monospace);cursor:pointer}",
+      ".md-plus-json-toggle:hover{color:var(--dsw-alias-label-primary)}",
+      ".md-plus-json-key{flex:none;font-weight:600;color:var(--dsw-alias-label-primary)}",
+      ".md-plus-json-colon{flex:none;margin-right:2px;color:var(--dsw-alias-label-tertiary)}",
+      ".md-plus-json-children{margin-left:14px;padding-left:6px;border-left:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 12%))}",
+      ".md-plus-json-summary{color:var(--dsw-alias-label-tertiary)}",
+      ".md-plus-json-string{color:#2f9e44;white-space:pre-wrap;word-break:break-word}",
+      "body[data-ds-dark-theme] .md-plus-json-string{color:#69db7c}",
+      ".md-plus-json-number{color:#1971c2}",
+      "body[data-ds-dark-theme] .md-plus-json-number{color:#74c0fc}",
+      ".md-plus-json-boolean{color:#e8590c}",
+      "body[data-ds-dark-theme] .md-plus-json-boolean{color:#ffa94d}",
+      ".md-plus-json-null{color:var(--dsw-alias-label-tertiary);font-style:italic}",
+      ".md-plus-semantic-table-body{max-height:70vh;overflow:auto}",
+      ".md-plus-semantic-table-wrap{margin:0;overflow:auto;border:1px solid var(--md-plus-tbl-line);border-radius:var(--md-plus-tbl-radius)}",
+      ".md-plus-semantic-table table{border-collapse:separate;border-spacing:0;width:100%;min-width:max-content;font:var(--md-plus-code-font-size,var(--dsh-code-font-size,11px))/1.5 var(--ds-font-family-code,monospace)}",
+      ".md-plus-semantic-table th{position:sticky;top:0;z-index:1;padding:7px 12px;border-bottom:1px solid var(--md-plus-tbl-line);background:var(--md-plus-tbl-head);color:var(--md-plus-tbl-head-fg);font-weight:600;text-align:center;white-space:nowrap}",
+      ".md-plus-semantic-table td{max-width:360px;padding:6px 12px;border-bottom:1px solid var(--md-plus-tbl-line);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".md-plus-semantic-table tbody tr:hover td{background:var(--md-plus-tbl-hover)}",
+      ".md-plus-semantic-number{text-align:center;font-variant-numeric:tabular-nums}",
+      ".md-plus-semantic-log-body{max-height:70vh;overflow:auto;padding:4px 0;border-radius:6px;background:var(--dsw-alias-markdown-code-block,transparent);font:var(--md-plus-code-font-size,var(--dsh-code-font-size,11px))/1.6 var(--ds-font-family-code,monospace)}",
+      ".md-plus-log-line{display:grid;grid-template-columns:44px 52px 1fr;gap:8px;align-items:start;padding:2px 8px;border-radius:4px}",
+      ".md-plus-log-line:hover{background:var(--dsw-alias-interactive-bg-hover,rgb(127 127 127 / 8%))}",
+      ".md-plus-log-number{color:var(--dsw-alias-label-tertiary);text-align:right;user-select:none;font-size:10px}",
+      ".md-plus-log-badge{color:var(--dsw-alias-label-tertiary);font-size:10px;font-weight:700;text-transform:uppercase}",
+      ".md-plus-log-line-error .md-plus-log-badge{color:#e03131}",
+      ".md-plus-log-line-warn .md-plus-log-badge{color:#e8590c}",
+      ".md-plus-log-line-info .md-plus-log-badge{color:#1971c2}",
+      ".md-plus-log-line-debug .md-plus-log-badge{color:#7048e8}",
+      ".md-plus-log-line-error{background:rgb(224 49 49 / 6%)}",
+      ".md-plus-log-line-warn{background:rgb(232 89 12 / 6%)}",
+      ".md-plus-log-text{white-space:pre-wrap;word-break:break-word}",
+      ".md-plus-semantic-diff-body{max-height:70vh;overflow:auto;border:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 18%));border-radius:6px;font:var(--md-plus-code-font-size,var(--dsh-code-font-size,11px))/1.5 var(--ds-font-family-code,monospace)}",
+      ".md-plus-diff-hunk + .md-plus-diff-hunk{border-top:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 18%))}",
+      ".md-plus-diff-hunk-header{padding:4px 8px;background:var(--dsw-alias-bg-layer-2,rgb(127 127 127 / 6%));color:var(--dsw-alias-label-tertiary);font-size:10px;white-space:pre-wrap}",
+      ".md-plus-diff-line{display:grid;grid-template-columns:52px 52px 16px 1fr;gap:4px;align-items:start;min-height:18px;padding:0 8px}",
+      ".md-plus-diff-num{color:var(--dsw-alias-label-tertiary);text-align:right;user-select:none}",
+      ".md-plus-diff-sign{text-align:center;color:var(--dsw-alias-label-tertiary)}",
+      ".md-plus-diff-text{white-space:pre-wrap;word-break:break-word}",
+      ".md-plus-diff-line-add{background:rgb(47 158 68 / 10%)}",
+      ".md-plus-diff-line-remove{background:rgb(224 49 49 / 10%)}",
+      ".md-plus-diff-line-add .md-plus-diff-sign{color:#2f9e44}",
+      ".md-plus-diff-line-remove .md-plus-diff-sign{color:#e03131}",
+      ".md-plus-diff-stat{display:inline-flex;gap:8px}",
+      ".md-plus-diff-added{color:#2f9e44;font-weight:600}",
+      ".md-plus-diff-removed{color:#e03131;font-weight:600}",
+      ".md-plus-diff-hunk-split .md-plus-diff-split-row{display:grid;grid-template-columns:1fr 1fr}",
+      ".md-plus-diff-split-cell{display:grid;grid-template-columns:44px 14px 1fr;gap:4px;min-height:18px;padding:0 8px}",
+      ".md-plus-diff-split-cell + .md-plus-diff-split-cell{border-left:1px solid var(--dsw-alias-border-secondary,rgb(127 127 127 / 18%))}",
+      ".md-plus-diff-empty{background:var(--dsw-alias-bg-layer-2,rgb(127 127 127 / 4%))}",
+      ".md-plus-diff-meta{padding:2px 8px;color:var(--dsw-alias-label-tertiary);font-style:italic}",
 
       // ── 长内容折叠：代码块、表格、图表卡共用一套按钮 ───────────────
       "." + FOLD_CLASS + "{position:relative}",
@@ -605,7 +749,9 @@ window.__ModuleLoader__.load({
     var foldResizeObserver = null;
     var foldResizeHandler = null;
     var diagramKindCache = new WeakMap();
+    var semanticKindCache = new WeakMap();
     var cacheKeys = new WeakMap();
+    var semanticStates = new WeakMap();
     var timer = null;
     var rescanQueued = false;
     var injected = new Set();
@@ -806,7 +952,9 @@ window.__ModuleLoader__.load({
             ", ." +
             SETTINGS_BTN_CLASS +
             ", ." +
-            SETTINGS_MODAL_CLASS,
+            SETTINGS_MODAL_CLASS +
+            ", ." +
+            SEMANTIC_CLASS,
         ) != null
       );
     }
@@ -834,6 +982,7 @@ window.__ModuleLoader__.load({
       cleanupFoldTargets();
       cleanupTableFreezeTargets();
       diagramKindCache = new WeakMap();
+      semanticKindCache = new WeakMap();
       if (rescanQueued) {
         rescanQueued = false;
         for (const block of document.querySelectorAll(BLOCK)) pending.add(block);
@@ -844,6 +993,7 @@ window.__ModuleLoader__.load({
         if (closestStreaming(block) !== null) continue;
         decorate(block);
         void enhance(block);
+        enhanceSemantic(block);
       }
       scanFolds();
       // 宿主重渲染可能把整块 body 换掉，设置入口跟着补回来
@@ -896,6 +1046,12 @@ window.__ModuleLoader__.load({
       titleKey: "downloadCode",
       ariaKey: "downloadCodeAria",
       run: (block) => downloadCode(block),
+    };
+    var SEMANTIC_BUTTON = {
+      cls: SEMANTIC_TOGGLE_CLASS,
+      titleKey: "semanticToggle",
+      ariaKey: "semanticToggleAria",
+      run: (block, button) => toggleSemanticView(block, button),
     };
     var PLAIN_BUTTONS = [WRAP_BUTTON, DOWNLOAD_BUTTON];
     var MMD_BUTTONS = [
@@ -977,14 +1133,14 @@ window.__ModuleLoader__.load({
       if (lang !== "" && isPlaceholderLabel(label)) paintLanguageLabel(block, lang);
 
       var hasNativeWrap = findNativeWrap(nativeButtons) !== null;
+      var baseSpecs = hasNativeWrap ? [DOWNLOAD_BUTTON] : PLAIN_BUTTONS;
+      if (semanticKindFor(lang) !== null) baseSpecs = [SEMANTIC_BUTTON].concat(baseSpecs);
       var specs =
         block.getAttribute(MMD_ATTR) === "failed"
           ? FAILED_BUTTONS
           : diagramKind(block) !== null
             ? MMD_BUTTONS
-            : hasNativeWrap
-              ? [DOWNLOAD_BUTTON]
-              : PLAIN_BUTTONS;
+            : baseSpecs;
       for (const existing of action.querySelectorAll("." + BTN_CLASS)) {
         if (specs.some((spec) => existing.classList.contains(spec.cls))) continue;
         existing.remove();
@@ -992,7 +1148,7 @@ window.__ModuleLoader__.load({
       }
       for (const spec of specs) {
         if (action.querySelector("." + spec.cls) !== null) continue;
-        var created = document.createElement("button");
+        const created = document.createElement("button");
         created.type = "button";
         created.className = BTN_CLASS + " " + spec.cls;
         created.title = t(spec.titleKey);
@@ -1663,6 +1819,138 @@ window.__ModuleLoader__.load({
       }, 1200);
     }
 
+    // ── 代码块语义视图 ───────────────────────────────────────────────
+    function semanticText(block) {
+      var pre = block.querySelector(CONTENT + " pre");
+      return pre === null ? "" : (pre.textContent ?? "");
+    }
+
+    function semanticKindOf(block) {
+      if (semanticKindCache.has(block)) return semanticKindCache.get(block);
+      var kind = semanticKindFor(readLang(block));
+      semanticKindCache.set(block, kind);
+      return kind;
+    }
+
+    function semanticNotice(text) {
+      var root = document.createElement("div");
+      root.className = SEMANTIC_CLASS;
+      var note = document.createElement("div");
+      note.className = SEMANTIC_CLASS + "-empty";
+      note.textContent = text;
+      root.appendChild(note);
+      return root;
+    }
+
+    /** 按需构建并缓存一块的语义视图；源码变了就重建。 */
+    function ensureSemanticView(block) {
+      var kind = semanticKindOf(block);
+      if (kind === null) return null;
+      var text = semanticText(block);
+      var previous = semanticStates.get(block);
+      if (previous !== undefined && previous.kind === kind && previous.text === text && previous.root.isConnected) {
+        return previous;
+      }
+
+      previous?.root.remove();
+      var root;
+      if (text.length > SEMANTIC_MAX_SOURCE) {
+        root = semanticNotice(t("semanticTooLarge"));
+      } else {
+        try {
+          root = buildSemanticView(document, kind, text, t);
+        } catch (error) {
+          console.warn("[dsh-md-plus] 语义视图构建失败", error);
+          return { error: true };
+        }
+      }
+      var content = block.querySelector(CONTENT);
+      if (content === null) return { error: true };
+      content.appendChild(root);
+      var state = { kind: kind, text: text, root: root };
+      semanticStates.set(block, state);
+      return state;
+    }
+
+    /** 默认语义模式下自动构建；手动切回源码的块不再被默认值拉回去。 */
+    function enhanceSemantic(block) {
+      if (!block.isConnected || closestStreaming(block) !== null) return;
+      if (semanticKindOf(block) === null) return;
+      var mode = block.getAttribute(SEMANTIC_ATTR);
+      if (mode === null) {
+        if (block.getAttribute(SEMANTIC_MANUAL_ATTR) === "1") return;
+        if (readSettings().semanticDefaultView !== "semantic") return;
+        block.setAttribute(SEMANTIC_ATTR, "on");
+        mode = "on";
+      }
+      if (mode !== "on") return;
+      var state = ensureSemanticView(block);
+      if (state === null || state.error) {
+        // 内容容器还没渲染出来时不要钉死成 off，等下一次 DOM 变更再试。
+        if (block.querySelector(CONTENT) === null) block.removeAttribute(SEMANTIC_ATTR);
+        else block.setAttribute(SEMANTIC_ATTR, "off");
+      }
+    }
+
+    function flashButtonTitle(button, text) {
+      var original = button.getAttribute("data-md-plus-semantic-original-title") ?? button.title;
+      if (!button.hasAttribute("data-md-plus-semantic-original-title")) {
+        button.setAttribute("data-md-plus-semantic-original-title", original);
+      }
+      button.title = text;
+      button.setAttribute("aria-label", text);
+      window.setTimeout(() => {
+        button.title = original;
+        button.setAttribute("aria-label", original);
+      }, 1600);
+    }
+
+    function toggleSemanticView(block, button) {
+      var content = block.querySelector(CONTENT);
+      if (block.getAttribute(SEMANTIC_ATTR) === "on") {
+        block.setAttribute(SEMANTIC_ATTR, "off");
+        block.setAttribute(SEMANTIC_MANUAL_ATTR, "1");
+        if (content !== null) {
+          resetFold(content);
+          scheduleFold(content, foldLimit("code"));
+        }
+        return;
+      }
+      var state = ensureSemanticView(block);
+      if (state === null || state.error) {
+        flashButtonTitle(button, t("semanticRenderFailed"));
+        return;
+      }
+      block.setAttribute(SEMANTIC_ATTR, "on");
+      block.setAttribute(SEMANTIC_MANUAL_ATTR, "1");
+      if (content !== null) {
+        resetFold(content);
+        scheduleFold(content, foldLimit("code"));
+      }
+    }
+
+    /** 设置里的默认值变化后，同步所有没被用户手动切过的块。 */
+    function applySemanticSettings() {
+      var mode = readSettings().semanticDefaultView;
+      for (const block of document.querySelectorAll(BLOCK)) {
+        if (closestStreaming(block) !== null) continue;
+        if (semanticKindOf(block) === null) continue;
+        if (block.getAttribute(SEMANTIC_MANUAL_ATTR) === "1") continue;
+        var content = block.querySelector(CONTENT);
+        if (mode === "semantic") {
+          var state = ensureSemanticView(block);
+          if (state !== null && !state.error) block.setAttribute(SEMANTIC_ATTR, "on");
+          else block.setAttribute(SEMANTIC_ATTR, "off");
+        } else {
+          block.setAttribute(SEMANTIC_ATTR, "off");
+        }
+        if (content !== null) {
+          resetFold(content);
+          scheduleFold(content, foldLimit("code"));
+        }
+      }
+    }
+
     function clearTableFreeze(table) {
       for (const cell of table.querySelectorAll(
         "." + FREEZE_ROW_CLASS + ",." + FREEZE_COL_CLASS + ",." + FREEZE_CROSS_CLASS,
@@ -1943,6 +2231,7 @@ window.__ModuleLoader__.load({
     /** 重新量折叠高度，但保留用户手动展开的节点，不然保存一次设置就白展开了。 */
     function rescanFolds() {
       diagramKindCache = new WeakMap();
+      semanticKindCache = new WeakMap();
       var codeLimit = foldLimit("code");
       var tableLimit = foldLimit("table");
       var diagramLimit = foldLimit("diagram");
@@ -2041,6 +2330,19 @@ window.__ModuleLoader__.load({
       }
       viewSelect.value = current.diagramView;
       panel.appendChild(settingRow(t("settingsView"), viewSelect));
+
+      var semanticSelect = document.createElement("select");
+      for (const [value, label] of [
+        ["source", t("settingsSemanticSource")],
+        ["semantic", t("settingsSemanticView")],
+      ]) {
+        var semanticOption = document.createElement("option");
+        semanticOption.value = value;
+        semanticOption.textContent = label;
+        semanticSelect.appendChild(semanticOption);
+      }
+      semanticSelect.value = current.semanticDefaultView;
+      panel.appendChild(settingRow(t("settingsSemantic"), semanticSelect, t("settingsSemanticHint")));
 
       var foldHint = document.createElement("p");
       foldHint.className = SETTINGS_MODAL_CLASS + "-section";
@@ -2198,6 +2500,9 @@ window.__ModuleLoader__.load({
             if (source.diagramView === "code" || source.diagramView === "diagram") {
               viewSelect.value = source.diagramView;
             }
+            if (source.semanticDefaultView === "source" || source.semanticDefaultView === "semantic") {
+              semanticSelect.value = source.semanticDefaultView;
+            }
             var theme = parsed !== null && typeof parsed === "object" ? parsed.mermaidTheme : null;
             if (typeof theme === "string" && THEME_ORDER.indexOf(theme) !== -1) {
               themeSelect.value = theme;
@@ -2222,6 +2527,7 @@ window.__ModuleLoader__.load({
         themeSelect.value = "blue";
         fontInput.value = "";
         viewSelect.value = DEFAULT_SETTINGS.diagramView;
+        semanticSelect.value = DEFAULT_SETTINGS.semanticDefaultView;
         foldCode.value = String(DEFAULT_SETTINGS.foldCode);
         foldTable.value = String(DEFAULT_SETTINGS.foldTable);
         foldDiagram.value = String(DEFAULT_SETTINGS.foldDiagram);
@@ -2235,6 +2541,7 @@ window.__ModuleLoader__.load({
         var next = {
           codeFontSize: readFontSize(fontInput),
           diagramView: viewSelect.value === "code" ? "code" : "diagram",
+          semanticDefaultView: semanticSelect.value === "semantic" ? "semantic" : "source",
           foldCode: readNumber(foldCode, DEFAULT_SETTINGS.foldCode),
           foldTable: readNumber(foldTable, DEFAULT_SETTINGS.foldTable),
           foldDiagram: readNumber(foldDiagram, DEFAULT_SETTINGS.foldDiagram),
@@ -2251,6 +2558,7 @@ window.__ModuleLoader__.load({
         }
         applyCodeFontSize();
         applyTableFreezeSettings();
+        if (previous.semanticDefaultView !== next.semanticDefaultView) applySemanticSettings();
         refreshThemeButtons();
         // 只对实际变化的设置项做副作用；否则用户手动展开的折叠会被一起清掉
         if (previousTheme !== nextTheme) redrawDiagrams();
@@ -2574,10 +2882,20 @@ window.__ModuleLoader__.load({
           injected.clear();
           for (const node of document.querySelectorAll("." + BTN_CLASS)) node.remove();
           for (const node of document.querySelectorAll("." + HOST_CLASS)) node.remove();
+          for (const node of document.querySelectorAll("." + SEMANTIC_CLASS)) node.remove();
           for (const node of document.querySelectorAll("." + FOLD_BTN_CLASS)) node.remove();
           for (const node of document.querySelectorAll("[" + FOLD_ATTR + "]")) resetFold(node);
           for (const node of document.querySelectorAll("." + TABLE_TOOLS_CLASS)) node.remove();
-          for (const attr of [DONE_ATTR, WRAP_ATTR, MMD_ATTR, TABLE_DONE_ATTR, "data-md-plus-lang", ZOOM_ATTR]) {
+          for (const attr of [
+            DONE_ATTR,
+            WRAP_ATTR,
+            MMD_ATTR,
+            TABLE_DONE_ATTR,
+            SEMANTIC_ATTR,
+            SEMANTIC_MANUAL_ATTR,
+            "data-md-plus-lang",
+            ZOOM_ATTR,
+          ]) {
             for (const node of document.querySelectorAll("[" + attr + "]")) node.removeAttribute(attr);
           }
           for (const node of document.querySelectorAll("[data-md-plus-original-label]")) {
@@ -2613,7 +2931,9 @@ window.__ModuleLoader__.load({
           settingsCache = null;
           themeCache = null;
           diagramKindCache = new WeakMap();
+          semanticKindCache = new WeakMap();
           cacheKeys = new WeakMap();
+          semanticStates = new WeakMap();
           // 不清运行时全局的话，插件重载后 loadScript() 会直接复用旧引擎
           delete window[HL_GLOBAL];
           delete window[MMD_GLOBAL];

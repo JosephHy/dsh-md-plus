@@ -1220,6 +1220,7 @@ test("设置面板保存字号、折叠阈值、配色和默认视图", async ()
     JSON.stringify({
       codeFontSize: 15,
       diagramView: "code",
+      semanticDefaultView: "source",
       foldCode: 600,
       foldTable: 700,
       foldDiagram: 800,
@@ -1264,6 +1265,7 @@ test("表格冻结行列可设置，首列默认不冻结", async () => {
     JSON.stringify({
       codeFontSize: 0,
       diagramView: "diagram",
+      semanticDefaultView: "source",
       foldCode: 480,
       foldTable: 520,
       foldDiagram: 720,
@@ -1365,6 +1367,7 @@ test("设置面板恢复默认会写回默认折叠阈值", async () => {
     JSON.stringify({
       codeFontSize: 0,
       diagramView: "diagram",
+      semanticDefaultView: "source",
       foldCode: 480,
       foldTable: 520,
       foldDiagram: 720,

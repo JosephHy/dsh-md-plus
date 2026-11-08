@@ -1,12 +1,13 @@
 # dsh-md-plus
 
-给 DeepSeek Harness Web / Desktop 的 Markdown 阅读增强插件：重做代码块卡片、给 DSH 不认识的语言补语法高亮、自己渲染 mermaid 图形、重做表格样式并支持复制、图片点击放大，以及一个调整显示参数的设置面板。
+给 DeepSeek Harness Web / Desktop 的 Markdown 阅读增强插件：重做代码块卡片、给 DSH 不认识的语言补语法高亮、给 JSON / CSV / 日志 / diff 代码块提供语义视图、自己渲染 mermaid 图形、重做表格样式并支持复制、图片点击放大，以及一个调整显示参数的设置面板。
 
 [![dsh-md-plus 显示效果预览](https://josephhy.github.io/dsh-md-plus/docs/preview.png)](https://josephhy.github.io/dsh-md-plus/docs/showcase/)
 
 ## 功能
 
 - **代码块**：统一成完整卡片，头部显示 `</>` 图标和语言名（无语言显示 `Plain text`），保留宿主原生的换行与复制按钮，并支持下载为文件；顶栏与卡片同色。
+- **语义视图**：`json` 渲染成可折叠树，`csv` / `tsv` 渲染成表格，`log` 按级别着色并支持筛选，`diff` 支持单栏 / 并排；在代码块头部一键切换源码与语义视图，默认源码，也可在设置里改为默认语义视图。
 - **Mermaid**：围栏渲染成 SVG，可在「图形 / 代码」间切换；支持复制图源、全屏查看（滚轮缩放、拖拽、双击适应、Esc 关闭）、四套配色，以及下载 SVG / PNG。
 - **长内容折叠**：代码块、表格、图表超过阈值自动折叠，底部出现「展开 / 收起」，长日志和长表格不会撑满聊天。
 - **表格**：浅色 / 深色两套样式，支持表内横向滚动；可按设置冻结前 N 行 / 前 M 列（默认冻结 1 行表头、0 列）；每张表上方右侧支持 CSV / TSV / Markdown / 富文本复制。
@@ -27,7 +28,7 @@ dsh plugin --profile desktop remove dsh-md-plus
 ```powershell
 npm install       # 顺带跑 prepare → build
 npm run build     # 产出 lib/ 下四个文件
-npm run check     # 构建 + 语法检查 + 91 条测试（check 会先 build）
+npm run check     # 构建 + 语法检查 + 126 条测试（check 会先 build）
 npm run release:dry # 维护者发版：先看 CHANGELOG 日期 + 提交 + tag + push 计划
 npm run release   # 维护者发版：改 CHANGELOG 日期 + 提交 + 打 tag + 推送（tag 会触发 GitHub Actions 自动发 npm）
 npm run preview   # 生成 preview.html（含真渲出来的 mermaid 图）
@@ -39,13 +40,14 @@ npm run smoke     # 用本机 Chrome 验证 Mermaid 渲染和 PNG 导出（Chrom
 
 ## 已知限制
 
+- 语义视图只按围栏语言触发（`json` / `csv` / `tsv` / `log` / `diff` / `patch`），不自动猜测没写语言的代码块；单块源码超过 512K 字符时不生成语义视图、显示「内容过大」提示，点代码块头部的语义视图按钮可切回源码。
 - DSH 0.2.1-rc.4 的头部语言名由宿主决定：不认识的围栏只显示占位文案「代码块」。插件会从宿主的 React fiber 里兜底读取真实语言，读不到时才退回正文嗅探；宿主改 React 结构后这条兜底可能失效。
 - `DSH_LANGS` 是 DSH 语言表的快照（108 条）。宿主加语言后这份快照会落后，落后只会多一次无效处理，不会出现双份高亮。
 - mermaid 12 的新图种（`usecase-beta`、`agentflow-beta`）标识符只认字母数字下划线，中文得写进标签：`actor Customer("用户")` 可以，`actor 用户` 会解析失败。
 - 高亮约 6.4 MB、mermaid 约 5.0 MB，按需下载，第一次用到时多花约 100ms 解析。
 - 依赖宿主 `.md-code-block`、`[data-code-block-content]`、`[data-code-block-banner]`、`data-streaming` 等钩子，以及 React fiber 里的 `lang`；DSH 改版后要同步调整 `src/client.js`。
 
-目前只影响代码块、mermaid、表格、正文图片和显示设置，不改 Markdown 的解析结果。
+目前只影响代码块（含语义视图）、mermaid、表格、正文图片和显示设置，不改 Markdown 的解析结果。
 
 ## 许可证
 
